@@ -20,6 +20,7 @@
 #include <wld/wld.h>
 #include <wld/wayland.h>
 #include <xkbcommon/xkbcommon.h>
+#include <xkbcommon/xkbcommon-compose.h>
 #include <wchar.h>
 #include <stdbool.h>
 
@@ -100,6 +101,8 @@ typedef struct {
     struct xkb_context *ctx;
     struct xkb_keymap *keymap;
     struct xkb_state *state;
+    struct xkb_compose_table *compose_table;
+    struct xkb_compose_state *compose_state;
     xkb_mod_index_t ctrl, alt, shift, logo;
     unsigned int mods;
 } XKB;
@@ -731,6 +734,8 @@ kbdkeymap(void *data, struct wl_keyboard *keyboard, uint32_t format,
           int32_t fd, uint32_t size)
 {
     char *string;
+    struct xkb_compose_table *compose_table;
+    struct xkb_compose_state *compose_state;
 
     if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1) {
         close(fd);
@@ -750,12 +755,62 @@ kbdkeymap(void *data, struct wl_keyboard *keyboard, uint32_t format,
     close(fd);
     wl.xkb.state = xkb_state_new(wl.xkb.keymap);
 
+	/* Set up XKB compose table */
+	compose_table =
+		xkb_compose_table_new_from_locale(wl.xkb.ctx,
+						  getenv("LANG"),
+						  XKB_COMPOSE_COMPILE_NO_FLAGS);
+	if (compose_table) {
+		/* Set up XKB compose state */
+		compose_state = xkb_compose_state_new(compose_table,
+					      XKB_COMPOSE_STATE_NO_FLAGS);
+		if (compose_state) {
+			xkb_compose_state_unref(wl.xkb.compose_state);
+			xkb_compose_table_unref(wl.xkb.compose_table);
+			wl.xkb.compose_state = compose_state;
+			wl.xkb.compose_table = compose_table;
+		} else {
+			fprintf(stderr, "could not create XKB compose state.  "
+				"Disabiling compose.\n");
+			xkb_compose_table_unref(compose_table);
+			compose_table = NULL;
+		}
+	} else {
+		fprintf(stderr, "could not create XKB compose table for locale '%s'.  "
+			"Disabiling compose\n", getenv("LANG"));
+	}
+
     wl.xkb.ctrl = xkb_keymap_mod_get_index(wl.xkb.keymap, XKB_MOD_NAME_CTRL);
     wl.xkb.alt = xkb_keymap_mod_get_index(wl.xkb.keymap, XKB_MOD_NAME_ALT);
     wl.xkb.shift = xkb_keymap_mod_get_index(wl.xkb.keymap, XKB_MOD_NAME_SHIFT);
     wl.xkb.logo = xkb_keymap_mod_get_index(wl.xkb.keymap, XKB_MOD_NAME_LOGO);
 
     wl.xkb.mods = 0;
+}
+
+static xkb_keysym_t
+processKey(Wayland wl, xkb_keysym_t sym)
+{
+	if (!wl.xkb.compose_state)
+		return sym;
+	if (sym == XKB_KEY_NoSymbol)
+		return sym;
+	if (xkb_compose_state_feed(wl.xkb.compose_state,
+				   sym) != XKB_COMPOSE_FEED_ACCEPTED)
+		return sym;
+
+	switch (xkb_compose_state_get_status(wl.xkb.compose_state)) {
+	case XKB_COMPOSE_COMPOSING:
+		return XKB_KEY_NoSymbol;
+	case XKB_COMPOSE_COMPOSED:
+		return xkb_compose_state_get_one_sym(wl.xkb.compose_state);
+	case XKB_COMPOSE_CANCELLED:
+		return XKB_KEY_NoSymbol;
+	case XKB_COMPOSE_NOTHING:
+		return sym;
+	default:
+		return sym;
+	}
 }
 
 void
@@ -789,6 +844,8 @@ kbdkey(void *data, struct wl_keyboard *keyboard, uint32_t serial, uint32_t time,
        uint32_t key, uint32_t state)
 {
     xkb_keysym_t ksym;
+	const xkb_keysym_t *ksyms;
+	uint32_t num_ksyms;
     char buf[32], *str;
     int len;
     Rune c;
@@ -804,7 +861,14 @@ kbdkey(void *data, struct wl_keyboard *keyboard, uint32_t serial, uint32_t time,
     }
 
 	wl.globalserial = serial;
-    ksym = xkb_state_key_get_one_sym(wl.xkb.state, key + 8);
+	num_ksyms = xkb_state_key_get_syms(wl.xkb.state, key + 8, &ksyms); 
+
+	ksym = XKB_KEY_NoSymbol;
+	if (num_ksyms == 1)
+		ksym = ksyms[0];
+
+	ksym = processKey(wl, ksym);
+
     len = xkb_keysym_to_utf8(ksym, buf, sizeof buf);
     if (len > 0)
         --len;
