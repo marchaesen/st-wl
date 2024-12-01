@@ -1,7 +1,9 @@
-config.h
-*.orig
 *.o
-xdg-shell-client-protocol.h
+config.h
+patches.h
 st-wl
 xdg-shell-protocol.c
+compile_commands.json
+.cache
+xdg-shell-client-protocol.h
 

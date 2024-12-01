@@ -88,8 +88,17 @@ static void zoomreset(const Arg *);
 typedef struct {
 	int tw, th; /* tty width and height */
 	int w, h; /* window width and height */
+	#if BACKGROUND_IMAGE_PATCH
+	int x, y; /* window location */
+	#endif // BACKGROUND_IMAGE_PATCH
+	#if ANYSIZE_PATCH
+	int hborderpx, vborderpx;
+	#endif // ANYSIZE_PATCH
 	int ch; /* char height */
 	int cw; /* char width  */
+	#if VERTCENTER_PATCH
+	int cyo; /* char y offset */
+	#endif // VERTCENTER_PATCH
 	int mode; /* window state/mode flags */
 	int cursor; /* cursor style */
 } TermWindow;
@@ -274,7 +283,7 @@ static struct wl_surface_listener surflistener = { surfenter, surfleave };
 static struct wl_keyboard_listener kbdlistener = { kbdkeymap, kbdenter,
 		kbdleave, kbdkey, kbdmodifiers, kbdrepeatinfo };
 static struct wl_pointer_listener ptrlistener = { ptrenter, ptrleave,
-		ptrmotion, ptrbutton, ptraxis };
+		ptrmotion, ptrbutton, ptraxis};
 static struct xdg_wm_base_listener wmlistener = { wmping };
 static struct xdg_surface_listener xdgsurflistener = { xdgsurfconfigure };
 static struct xdg_toplevel_listener xdgtoplevellistener = {
@@ -504,7 +513,12 @@ ptrbutton(void * data, struct wl_pointer * pointer, uint32_t serial,
 	switch (state) {
 		case WL_POINTER_BUTTON_STATE_RELEASED:
 			if (button == BTN_MIDDLE) {
+	#if CLIPBOARD_PATCH
+	      clippaste(NULL);
+	#else
 				wlselpaste();
+	{ BTN_MIDDLE, MOD_MASK_ANY, "", selpaste},
+	#endif // CLIPBOARD_PATCH
 			} else if (button == BTN_LEFT) {
 				wl.globalserial = serial;
 				mousesel(1);

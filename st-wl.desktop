@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=ST Terminal
+Keywords=shell;prompt;command;commandline;cmd;
+Exec=/usr/local/bin/st-wl -A .95
+Icon=utilities-terminal
+Type=Application
+Categories=GNOME;GTK;System;TerminalEmulator;
+Terminal=false
+StartupWMClass=terminal
+Comment[en_US]=Simple terminal
+Comment=Simple terminal
+X-Desktop-File-Install-Version=0.23
