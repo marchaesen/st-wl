@@ -41,25 +41,21 @@ typedef struct {
 } Shortcut;
 
 typedef struct {
-	uint b;
-	uint mask;
-	char *s;
-} MouseShortcut;
-
-typedef struct {
 	xkb_keysym_t k;
 	uint mask;
-	char *s;
+	const char *s;
 	/* three valued logic variables: 0 indifferent, 1 on, -1 off */
 	signed char appkey;    /* application keypad */
 	signed char appcursor; /* application cursor */
 } Key;
 
 typedef struct {
+	uint mask;
 	int axis;
 	int dir;
-	uint mask;
-	char s[ESC_BUF_SIZ];
+	void (*func)(const Arg *);
+  const Arg arg;
+  int screen;
 } Axiskey;
 
 /* Key modifiers */
@@ -77,6 +73,7 @@ static void clipcopy(const Arg *);
 static void clippaste(const Arg *);
 static void numlock(const Arg *);
 static void selpaste(const Arg *);
+static void ttysend(const Arg *);
 static void zoom(const Arg *);
 static void zoomabs(const Arg *);
 static void zoomreset(const Arg *);
@@ -202,7 +199,7 @@ static void setsel(char*, uint32_t);
 static inline void selwritebuf(char *, int);
 
 static int match(uint, uint);
-static char *kmap(xkb_keysym_t, uint);
+static const char *kmap(xkb_keysym_t, uint);
 static void kbdkeymap(void *, struct wl_keyboard *, uint32_t, int32_t,
 		uint32_t);
 static void kbdenter(void *, struct wl_keyboard *, uint32_t,
@@ -437,14 +434,16 @@ wlmousereportmotion(wl_fixed_t fx, wl_fixed_t fy)
 
 	if (x == oldx && y == oldy)
 		return;
+
+  oldx = x;
+	oldy = y;
+
 	if (!IS_SET(MODE_MOUSEMOTION) && !IS_SET(MODE_MOUSEMANY))
 		return;
 	/* MOUSE_MOTION: no reporting if no button is pressed */
 	if (IS_SET(MODE_MOUSEMOTION) && oldbutton == 3)
 		return;
 
-	oldx = x;
-	oldy = y;
 	wlmousereport(oldbutton + 32, false, x, y);
 }
 
@@ -452,7 +451,7 @@ void
 wlmousereportaxis(uint32_t axis, wl_fixed_t amount)
 {
 	wlmousereport(64 + (axis == AXIS_VERTICAL ? 4 : 6)
-			+ (amount > 0 ? 1 : 0), false, oldx, oldy);
+			+ (amount > 0 ? 1 : 0) - 4, false, oldx, oldy);
 }
 
 void
@@ -495,7 +494,6 @@ void
 ptrbutton(void * data, struct wl_pointer * pointer, uint32_t serial,
 		uint32_t time, uint32_t button, uint32_t state)
 {
-	MouseShortcut *ms;
 	int snap;
 
 	if (IS_SET(MODE_MOUSE) && !(wl.xkb.mods & forceselmod)) {
@@ -514,13 +512,6 @@ ptrbutton(void * data, struct wl_pointer * pointer, uint32_t serial,
 			break;
 
 		case WL_POINTER_BUTTON_STATE_PRESSED:
-			for (ms = mshortcuts; ms < mshortcuts + LEN(mshortcuts); ms++) {
-				if (button == ms->b && match(ms->mask, wl.xkb.mods)) {
-					ttywrite(ms->s, strlen(ms->s), 1);
-					return;
-				}
-			}
-
 			if (button == BTN_LEFT) {
 				/*
 				 * If the user clicks below predefined timeouts
@@ -546,18 +537,19 @@ void
 ptraxis(void * data, struct wl_pointer * pointer, uint32_t time, uint32_t axis,
 		wl_fixed_t value)
 {
-	Axiskey *ak;
 	int dir = value > 0 ? +1 : -1;
+	int screen = tisaltscr() ? S_ALT : S_PRI;
 
 	if (IS_SET(MODE_MOUSE) && !(wl.xkb.mods & forceselmod)) {
 		wlmousereportaxis(axis, value);
 		return;
 	}
 
-	for (ak = ashortcuts; ak < ashortcuts + LEN(ashortcuts); ak++) {
+	for (Axiskey *ak = ashortcuts; ak < ashortcuts + LEN(ashortcuts); ak++) {
 		if (axis == ak->axis && dir == ak->dir
+        && (!ak->screen || (ak->screen == screen))
 				&& match(ak->mask, wl.xkb.mods)) {
-			ttywrite(ak->s, strlen(ak->s), 1);
+			ak->func(&(ak->arg));
 			return;
 		}
 	}
@@ -641,7 +633,8 @@ wlselpaste(void)
 				str += len;
 			}
 		} else {
-			pipe(fds);
+			if (-1==pipe(fds))
+        fprintf(stderr, "Error creating pipe");
 			wl_data_offer_receive(wl.seloffer, "text/plain", fds[1]);
 			wl_display_flush(wl.dpy);
 			close(fds[1]);
@@ -691,7 +684,7 @@ match(uint mask, uint state)
 	return mask == MOD_MASK_ANY || mask == (state & ~ignoremod);
 }
 
-char*
+const char*
 kmap(xkb_keysym_t k, uint state)
 {
 	Key *kp;
@@ -846,7 +839,8 @@ kbdkey(void *data, struct wl_keyboard *keyboard, uint32_t serial, uint32_t time,
 	xkb_keysym_t ksym;
 	const xkb_keysym_t *ksyms;
 	uint32_t num_ksyms;
-	char buf[32], *str;
+	char buf[32];
+  const char *str;
 	int len;
 	Rune c;
 	Shortcut *bp;
@@ -971,6 +965,12 @@ cresize(int width, int height)
 	tresize(col, row);
 	wlresize(col, row);
 	ttyresize(win.tw, win.th);
+}
+
+void
+ttysend(const Arg *arg)
+{
+	ttywrite(arg->s, strlen(arg->s), 1);
 }
 
 void

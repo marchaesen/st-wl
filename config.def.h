@@ -149,18 +149,29 @@ static char mouseshape[] = "xterm";
 static unsigned int defaultattr = 11;
 
 /*
- * Internal mouse shortcuts.
- * Beware that overloading Button1 will disable the selection.
+ * Scrollwheel up/down shortcuts.
  */
-static MouseShortcut mshortcuts[] = {
-    /* button               mask            string */
-    { -1,                   MOD_MASK_NONE,  "" }
-};
-
 static Axiskey ashortcuts[] = {
-    /* axis         direction   mask        string */
-    { AXIS_VERTICAL,    +1,     MOD_MASK_ANY,   "\031"},
-    { AXIS_VERTICAL,    -1,     MOD_MASK_ANY,   "\005"},
+    /* mask axis         direction   function arg screen */
+	#if SCROLLBACK_MOUSE_PATCH
+	{ MOD_MASK_SHIFT, AXIS_VERTICAL, +1, kscrollup   , {.i = 1}, S_PRI},
+	{ MOD_MASK_SHIFT, AXIS_VERTICAL, -1, kscrolldown , {.i = 1}, S_PRI},
+	#elif UNIVERSCROLL_PATCH
+	{ MOD_MASK_ANY, AXIS_VERTICAL,   +1, ttysend, {.s = "\033[5;2~"}, S_PRI},
+	{ MOD_MASK_ANY, AXIS_VERTICAL,   -1, ttysend, {.s = "\033[6;2~"}, S_PRI},
+	#else
+	{ MOD_MASK_SHIFT, AXIS_VERTICAL, +1, ttysend, {.s = "\033[5;2~"} },
+	{ MOD_MASK_SHIFT, AXIS_VERTICAL, -1, ttysend, {.s = "\033[6;2~"} },
+	#endif // SCROLLBACK_MOUSE_PATCH
+	#if SCROLLBACK_MOUSE_ALTSCREEN_PATCH || REFLOW_PATCH
+	{ MOD_MASK_ANY, AXIS_VERTICAL,   +1, kscrollup,   {.i = 1}, S_PRI},
+	{ MOD_MASK_ANY, AXIS_VERTICAL,   -1, kscrolldown, {.i = 1}, S_PRI},
+	{ MOD_MASK_ANY, AXIS_VERTICAL,   +1, ttysend, {.s = "\031"}, S_ALT},
+	{ MOD_MASK_ANY, AXIS_VERTICAL,   -1, ttysend, {.s = "\005"}, S_ALT},
+	#else
+	{ MOD_MASK_ANY, AXIS_VERTICAL,   +1, ttysend, {.s = "\031"}},
+	{ MOD_MASK_ANY, AXIS_VERTICAL,   -1, ttysend, {.s = "\005"}},
+	#endif // SCROLLBACK_MOUSE_ALTSCREEN_PATCH
 };
 
 /* Internal keyboard shortcuts. */

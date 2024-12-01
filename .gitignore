@@ -1,1 +1,7 @@
 config.h
+*.orig
+*.o
+xdg-shell-client-protocol.h
+st-wl
+xdg-shell-protocol.c
+

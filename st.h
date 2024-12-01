@@ -40,6 +40,13 @@ enum glyph_attribute {
 	ATTR_BOLD_FAINT = ATTR_BOLD | ATTR_FAINT,
 };
 
+/* Used to control which screen(s) keybindings and mouse shortcuts apply to. */
+enum screen {
+	S_PRI = -1, /* primary screen */
+	S_ALL = 0,  /* both primary and alt screen */
+	S_ALT = 1   /* alternate screen */
+};
+
 enum selection_mode {
 	SEL_IDLE = 0,
 	SEL_EMPTY = 1,
@@ -77,6 +84,7 @@ typedef union {
 	uint ui;
 	float f;
 	const void *v;
+	const char *s;
 } Arg;
 
 void die(const char *, ...);
@@ -89,6 +97,7 @@ void sendbreak(const Arg *);
 void toggleprinter(const Arg *);
 
 int tattrset(int);
+int tisaltscr(void);
 void tnew(int, int);
 void tresize(int, int);
 void tsetdirtattr(int);

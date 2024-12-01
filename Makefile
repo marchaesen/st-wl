@@ -1,6 +1,5 @@
 # st - simple terminal
 # See LICENSE file for copyright and license details.
-.POSIX:
 
 include config.mk
 
@@ -15,7 +14,7 @@ options:
 	@echo "LDFLAGS = $(STLDFLAGS)"
 	@echo "CC      = $(CC)"
 
-config.h:
+config.h: config.def.h
 	cp config.def.h config.h
 
 xdg-shell-protocol.c:
@@ -29,13 +28,17 @@ xdg-shell-client-protocol.h:
 .c.o:
 	$(CC) $(STCFLAGS) -c $<
 
-st.o: st.h win.h
-wl.o: arg.h st.h win.h config.h xdg-shell-client-protocol.h
+st.o: config.h st.h win.h
+wl.o: arg.h config.h st.h win.h xdg-shell-client-protocol.h
 
 $(OBJ): config.h config.mk
 
-st-wl: $(OBJ)
-	$(CC) -o $@ $(OBJ) $(STLDFLAGS)
+st-wl: wld/libwld.a $(OBJ)
+	$(CC) $(STCFLAGS) -o $@ $(OBJ) $(STLDFLAGS)
+
+wld/libwld.a:
+	$(MAKE) -C wld
+
 
 clean:
 	rm -f st-wl $(OBJ) st-wl-$(VERSION).tar.gz xdg-shell-*

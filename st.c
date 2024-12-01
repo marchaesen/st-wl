@@ -945,6 +945,12 @@ tattrset(int attr)
 	return 0;
 }
 
+int
+tisaltscr(void)
+{
+	return IS_SET(MODE_ALTSCREEN);
+}
+
 void
 tsetdirt(int top, int bot)
 {
