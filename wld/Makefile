@@ -18,7 +18,6 @@ WLD_LIB_LINK    := libwld.so
 WLD_LIB_SONAME  := $(WLD_LIB_LINK).$(VERSION_MAJOR)
 WLD_LIB         := $(WLD_LIB_LINK).$(VERSION)
 
-TARGETS         := wld.pc
 CLEAN_FILES     :=
 
 WLD_REQUIRES = fontconfig pixman-1
@@ -33,24 +32,6 @@ WLD_SOURCES =           \
     surface.c
 WLD_HEADERS = wld.h
 
-ifeq ($(ENABLE_DRM),1)
-    WLD_REQUIRES_PRIVATE += libdrm
-    WLD_SOURCES += drm.c dumb.c
-    WLD_HEADERS += drm.h
-
-    ifneq ($(findstring intel,$(DRM_DRIVERS)),)
-        WLD_REQUIRES_PRIVATE += libdrm_intel
-        WLD_SOURCES += intel.c intel/batch.c
-        WLD_CPPFLAGS += -DWITH_DRM_INTEL=1
-    endif
-
-    ifneq ($(findstring nouveau,$(DRM_DRIVERS)),)
-        WLD_REQUIRES_PRIVATE += libdrm_nouveau
-        WLD_SOURCES += nouveau.c
-        WLD_CPPFLAGS += -DWITH_DRM_NOUVEAU=1
-    endif
-endif
-
 ifeq ($(ENABLE_PIXMAN),1)
     WLD_SOURCES += pixman.c
     WLD_HEADERS += pixman.h
@@ -61,15 +42,7 @@ ifeq ($(ENABLE_WAYLAND),1)
     WLD_SOURCES += wayland.c
     WLD_HEADERS += wayland.h
 
-    ifneq ($(findstring shm,$(WAYLAND_INTERFACES)),)
-        WLD_SOURCES += wayland-shm.c
-        WLD_CPPFLAGS += -DWITH_WAYLAND_SHM=1
-    endif
-
-    ifneq ($(findstring drm,$(WAYLAND_INTERFACES)),)
-        WLD_SOURCES += wayland-drm.c protocol/wayland-drm-protocol.c
-        WLD_CPPFLAGS += -DWITH_WAYLAND_DRM=1
-    endif
+    WLD_SOURCES += wayland-shm.c
 endif
 
 ifeq ($(if $(V),$(V),0), 0)
@@ -107,11 +80,6 @@ ifeq ($(ENABLE_STATIC),1)
     CLEAN_FILES += $(WLD_STATIC_OBJECTS)
 endif
 
-ifeq ($(ENABLE_SHARED),1)
-    TARGETS += $(WLD_LIB) $(WLD_LIB_LINK) $(WLD_LIB_SONAME)
-    CLEAN_FILES += $(WLD_SHARED_OBJECTS)
-endif
-
 CLEAN_FILES += $(TARGETS)
 
 compile     = $(call quiet,CC) $(FINAL_CPPFLAGS) $(FINAL_CFLAGS) -c -o $@ $< \
@@ -123,8 +91,6 @@ pkgconfig   = $(sort $(foreach pkg,$(1),$(if $($(pkg)_$(3)),$($(pkg)_$(3)), \
 .PHONY: all
 all: $(TARGETS)
 
-include $(foreach dir,intel protocol,$(dir)/local.mk)
-
 .deps:
 	@mkdir "$@"
 
@@ -133,18 +99,6 @@ include $(foreach dir,intel protocol,$(dir)/local.mk)
 
 %.lo: %.c | .deps
 	$(compile) $(WLD_CPPFLAGS) $(WLD_PACKAGE_CFLAGS) -fPIC
-
-wayland-drm.o wayland-drm.lo: protocol/wayland-drm-client-protocol.h
-
-wld.pc: wld.pc.in
-	$(call quiet,GEN,sed)                                       \
-	    -e "s:@VERSION@:$(VERSION):"                            \
-	    -e "s:@PREFIX@:$(PREFIX):"                              \
-	    -e "s:@LIBDIR@:$(LIBDIR):"                              \
-	    -e "s:@INCLUDEDIR@:$(INCLUDEDIR):"                      \
-	    -e "s:@WLD_REQUIRES@:$(WLD_REQUIRES):"                  \
-	    -e "s:@WLD_REQUIRES_PRIVATE@:$(WLD_REQUIRES_PRIVATE):"  \
-	    $< > $@
 
 libwld.a: $(WLD_STATIC_OBJECTS)
 	$(call quiet,AR) cr $@ $^
@@ -157,10 +111,6 @@ $(WLD_LIB_SONAME) $(WLD_LIB_LINK): $(WLD_LIB)
 
 $(foreach dir,LIB PKGCONFIG,$(DESTDIR)$($(dir)DIR)) $(DESTDIR)$(INCLUDEDIR)/wld:
 	mkdir -p $@
-
-.PHONY: install-wld.pc
-install-wld.pc: wld.pc | $(DESTDIR)$(PKGCONFIGDIR)
-	install -m 644 $< $(DESTDIR)$(PKGCONFIGDIR)
 
 .PHONY: install-libwld.a
 install-libwld.a: libwld.a | $(DESTDIR)$(LIBDIR)

@@ -1877,7 +1877,7 @@ wlinit(int cols, int rows)
 	wl.needdraw = true;
 	registry = wl_display_get_registry(wl.dpy);
 	wl_registry_add_listener(registry, &reglistener, NULL);
-	wld.ctx = wld_wayland_create_context(wl.dpy, WLD_ANY);
+	wld.ctx = wld_wayland_create_context(wl.dpy);
 	wld.renderer = wld_create_renderer(wld.ctx);
 
 	wl_display_roundtrip(wl.dpy);

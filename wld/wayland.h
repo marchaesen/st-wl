@@ -29,29 +29,19 @@
 
 struct wl_display;
 struct wl_surface;
+struct wl_event_queue;
+struct wld_context;
 
 #define WLD_WAYLAND_ID (0x3 << 24)
-
-enum wld_wayland_interface_id
-{
-    /**
-     * Give up on trying any new interfaces. This can be considered as a
-     * sentinel for wld_wayland_create_context.
-     */
-    WLD_NONE = -2,
-
-    /**
-     * Try any available interface.
-     */
-    WLD_ANY = -1,
-    WLD_DRM,
-    WLD_SHM
-};
 
 enum wld_wayland_object_type
 {
     WLD_WAYLAND_OBJECT_BUFFER = WLD_WAYLAND_ID
 };
+
+struct wayland_context * wayland_create_context
+    (struct wl_display * display, struct wl_event_queue * queue);
+bool wayland_has_format(struct wld_context * context, uint32_t format);
 
 /**
  * Create a new WLD context which uses various available Wayland interfaces
@@ -61,12 +51,9 @@ enum wld_wayland_object_type
  * You can specify the particular interface you want to use by specifying them
  * as arguments. Interfaces will be tried in the order they are given.
  *
- * The last argument must be either WLD_NONE or WLD_ANY.
- *
- * @see enum wld_wayland_interface_id
  */
 struct wld_context * wld_wayland_create_context
-    (struct wl_display * display, enum wld_wayland_interface_id id, ...);
+    (struct wl_display * display, ...);
 
 struct wld_surface * wld_wayland_create_surface(struct wld_context * context,
                                                 uint32_t width, uint32_t height,

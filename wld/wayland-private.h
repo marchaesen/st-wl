@@ -34,25 +34,9 @@ struct wl_buffer;
 struct wayland_context
 {
     struct wld_context base;
-    const struct wayland_impl * impl;
     struct wl_display * display;
     struct wl_event_queue * queue;
 };
-
-struct wayland_impl
-{
-    struct wayland_context * (* create_context)(struct wl_display * display,
-                                                struct wl_event_queue * queue);
-    bool (* has_format)(struct wld_context * context, uint32_t format);
-};
-
-#if WITH_WAYLAND_DRM
-extern const struct wayland_impl drm_wayland_impl;
-#endif
-
-#if WITH_WAYLAND_SHM
-extern const struct wayland_impl shm_wayland_impl;
-#endif
 
 bool wayland_buffer_add_exporter(struct buffer * buffer, struct wl_buffer * wl);
 

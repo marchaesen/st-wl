@@ -52,7 +52,6 @@ struct shm_buffer
 #define WAYLAND_IMPL_NAME shm
 #include "interface/context.h"
 #include "interface/buffer.h"
-#include "interface/wayland.h"
 IMPL(shm_context, wld_context)
 IMPL(shm_buffer, wld_buffer)
 
