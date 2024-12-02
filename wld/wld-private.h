@@ -96,31 +96,6 @@ struct wld_context_impl
     void (* destroy)(struct wld_context * context);
 };
 
-struct wld_renderer_impl
-{
-    uint32_t (* capabilities)(struct wld_renderer * renderer,
-                              struct buffer * buffer);
-    bool (* set_target)(struct wld_renderer * renderer, struct buffer * buffer);
-    void (* fill_rectangle)(struct wld_renderer * renderer,
-                            uint32_t color, int32_t x, int32_t y,
-                            uint32_t width, uint32_t height);
-    void (* fill_region)(struct wld_renderer * renderer,
-                         uint32_t color, pixman_region32_t * region);
-    void (* copy_rectangle)(struct wld_renderer * renderer, struct buffer * src,
-                            int32_t dst_x, int32_t dst_y,
-                            int32_t src_x, int32_t src_y,
-                            uint32_t width, uint32_t height);
-    void (* copy_region)(struct wld_renderer * renderer, struct buffer * src,
-                         int32_t dst_x, int32_t dst_y,
-                         pixman_region32_t * region);
-    void (* draw_text)(struct wld_renderer * renderer,
-                       struct font * font, uint32_t color,
-                       int32_t x, int32_t y, const char * text, uint32_t length,
-                       struct wld_extents * extents);
-    void (* flush)(struct wld_renderer * renderer);
-    void (* destroy)(struct wld_renderer * renderer);
-};
-
 struct buffer
 {
     struct wld_buffer base;
@@ -228,8 +203,7 @@ struct wld_surface * buffered_surface_create(struct wld_context * context,
 void context_initialize(struct wld_context * context,
                         const struct wld_context_impl * impl);
 
-void renderer_initialize(struct wld_renderer * renderer,
-                         const struct wld_renderer_impl * impl);
+void renderer_initialize(struct wld_renderer * renderer);
 
 void buffer_initialize(struct buffer * buffer,
                        const struct wld_buffer_impl * impl,

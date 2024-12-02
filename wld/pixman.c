@@ -52,10 +52,7 @@ struct pixman_map
 };
 
 #include "interface/context.h"
-#define RENDERER_IMPLEMENTS_REGION
-#include "interface/renderer.h"
 #include "interface/buffer.h"
-IMPL(pixman_renderer, wld_renderer)
 IMPL(pixman_buffer, wld_buffer)
 
 static struct wld_context context = { .impl = &wld_context_impl };
@@ -73,7 +70,7 @@ struct wld_renderer * context_create_renderer(struct wld_context * context)
     if (!(renderer->glyph_cache = pixman_glyph_cache_create()))
         goto error1;
 
-    renderer_initialize(&renderer->base, &wld_renderer_impl);
+    renderer_initialize(&renderer->base);
     renderer->target = NULL;
 
     return &renderer->base;
@@ -247,7 +244,7 @@ static pixman_image_t * pixman_image(struct buffer * buffer)
 
 bool renderer_set_target(struct wld_renderer * base, struct buffer * buffer)
 {
-    struct pixman_renderer * renderer = pixman_renderer(base);
+    struct pixman_renderer * renderer = (struct pixman_renderer *)base;
 
     if (renderer->target)
         pixman_image_unref(renderer->target);
@@ -263,7 +260,7 @@ void renderer_fill_rectangle(struct wld_renderer * base, uint32_t color,
                              int32_t x, int32_t y,
                              uint32_t width, uint32_t height)
 {
-    struct pixman_renderer * renderer = pixman_renderer(base);
+    struct pixman_renderer * renderer = (struct pixman_renderer *)base;
     pixman_color_t pixman_color = PIXMAN_COLOR(color);
     pixman_box32_t box = { x, y, x + width, y + height };
 
@@ -274,7 +271,7 @@ void renderer_fill_rectangle(struct wld_renderer * base, uint32_t color,
 void renderer_fill_region(struct wld_renderer * base, uint32_t color,
                           pixman_region32_t * region)
 {
-    struct pixman_renderer * renderer = pixman_renderer(base);
+    struct pixman_renderer * renderer = (struct pixman_renderer *)base;
     pixman_color_t pixman_color = PIXMAN_COLOR(color);
     pixman_box32_t * boxes;
     int num_boxes;
@@ -289,7 +286,7 @@ void renderer_copy_rectangle(struct wld_renderer * base, struct buffer * buffer,
                              int32_t src_x, int32_t src_y,
                              uint32_t width, uint32_t height)
 {
-    struct pixman_renderer * renderer = pixman_renderer(base);
+    struct pixman_renderer * renderer = (struct pixman_renderer *)base;
     pixman_image_t * src = pixman_image(buffer), * dst = renderer->target;
 
     if (!src) return;
@@ -302,7 +299,7 @@ void renderer_copy_region(struct wld_renderer * base, struct buffer * buffer,
                           int32_t dst_x, int32_t dst_y,
                           pixman_region32_t * region)
 {
-    struct pixman_renderer * renderer = pixman_renderer(base);
+    struct pixman_renderer * renderer = (struct pixman_renderer *)base;
     pixman_image_t * src = pixman_image(buffer), * dst = renderer->target;
 
     if (!src) return;
@@ -331,7 +328,7 @@ void renderer_draw_text(struct wld_renderer * base,
                         int32_t x, int32_t y, const char * text,
                         uint32_t length, struct wld_extents * extents)
 {
-    struct pixman_renderer * renderer = pixman_renderer(base);
+    struct pixman_renderer * renderer = (struct pixman_renderer *)base;
     int ret;
     uint32_t c;
     struct glyph * glyph;
@@ -424,7 +421,7 @@ void renderer_flush(struct wld_renderer * renderer)
 
 void renderer_destroy(struct wld_renderer * base)
 {
-    struct pixman_renderer * renderer = pixman_renderer(base);
+    struct pixman_renderer * renderer = (struct pixman_renderer *)base;
 
     pixman_glyph_cache_destroy(renderer->glyph_cache);
     free(renderer);

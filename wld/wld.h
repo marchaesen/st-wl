@@ -228,7 +228,6 @@ void wld_destroy_surface(struct wld_surface * surface);
 
 struct wld_renderer
 {
-    const struct wld_renderer_impl * const impl;
     struct wld_buffer * target;
 };
 
