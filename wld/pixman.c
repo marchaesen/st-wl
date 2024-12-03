@@ -361,31 +361,34 @@ void renderer_draw_text(struct wld_renderer * base,
         if (!glyphs[index].glyph)
         {
             uint8_t * src, * dst;
-            uint32_t row, byte_index, bytes_per_row, pitch;
+            uint32_t pitch;
             pixman_image_t * image;
             FT_Bitmap * bitmap;
 
             bitmap = &glyph->bitmap;
             image = pixman_image_create_bits
-                (PIXMAN_a1, bitmap->width, bitmap->rows, NULL, bitmap->pitch);
+                (PIXMAN_a8, bitmap->width, bitmap->rows, NULL, bitmap->pitch);
 
             if (!image)
                 goto advance;
 
             pitch = pixman_image_get_stride(image);
-            bytes_per_row = (bitmap->width + 7) / 8;
             src = bitmap->buffer;
             dst = (uint8_t *) pixman_image_get_data(image);
 
-            for (row = 0; row < bitmap->rows; ++row)
+            if (pitch == bitmap->pitch)
             {
-                /* Pixman's A1 format expects the bits in the opposite order
-                 * that Freetype gives us. Sigh... */
-                for (byte_index = 0; byte_index < bytes_per_row; ++byte_index)
-                    dst[byte_index] = reverse(src[byte_index]);
-
-                dst += pitch;
-                src += bitmap->pitch;
+              memcpy(dst, src, bitmap->rows * pitch);
+            }
+            else
+            {
+              for (size_t r = 0; r < bitmap->rows; r++)
+              {
+                for (size_t c = 0; c < bitmap->width; c++)
+                {
+                  dst[r * pitch + c] = bitmap->buffer[r * bitmap->pitch + c];
+                }
+              }
             }
 
             /* Insert the glyph into the cache. */
