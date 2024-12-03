@@ -52,6 +52,7 @@ void xsetpointermotion(int);
 void xsetsel(char *);
 int xstartdraw(void);
 void wlneeddraw(void);
+void wltermclear(int col1, int row1, int col2, int row2);
 
 void xclearwin(void);
 #if REFLOW_PATCH && KEYBOARDSELECT_PATCH

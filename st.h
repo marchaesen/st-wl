@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <time.h>
 #include <sys/types.h>
+#include <fontconfig/fontconfig.h>
 #include "patches.h"
 
 /* Arbitrary sizes */
@@ -210,6 +211,29 @@ typedef union {
 	const void *v;
 	const char *s;
 } Arg;
+
+/* Font structure */
+#define Font Font_
+typedef struct {
+	int height;
+	int width;
+	int ascent;
+	int descent;
+	int badslant;
+	int badweight;
+	short lbearing;
+	short rbearing;
+	struct wld_font *match;
+	FcFontSet *set;
+	FcPattern *pattern;
+} Font;
+
+/* Drawing Context */
+typedef struct {
+	uint32_t *col;
+	size_t collen;
+	Font font, bfont, ifont, ibfont;
+} DC;
 
 void die(const char *, ...);
 void redraw(void);

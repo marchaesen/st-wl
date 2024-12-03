@@ -16,9 +16,6 @@ XDG_DECORATION_PROTO = `$(PKG_CONFIG) --variable=pkgdatadir wayland-protocols`/u
 
 PKG_CONFIG = pkg-config
 
-# Uncomment this for the alpha patch / ALPHA_PATCH
-XRENDER = `$(PKG_CONFIG) --libs xrender`
-
 # Uncomment this for the themed cursor patch / THEMED_CURSOR_PATCH
 #XCURSOR = `$(PKG_CONFIG) --libs xcursor`
 

@@ -1,8 +1,7 @@
 [Desktop Entry]
 Name=ST-WL Terminal
 Keywords=shell;prompt;command;commandline;cmd;
-#Exec=/usr/local/bin/st-wl -A .95
-Exec=/usr/local/bin/st-wl
+Exec=/usr/local/bin/st-wl -A .95
 Icon=utilities-terminal
 Type=Application
 Categories=GNOME;GTK;System;TerminalEmulator;

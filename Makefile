@@ -48,7 +48,11 @@ $(OBJ): config.h config.mk patches.h
 st-wl: wld/libwld.a $(OBJ)
 	$(CC) $(STCFLAGS) -o $@ $(OBJ) $(STLDFLAGS)
 
-wld/libwld.a:
+wlddepends:= wayland-private.h surface.c color.c buffer.c interface/context.h interface/buffer.h\
+						 interface/surface.h pixman.h config.mk renderer.c wayland-shm.c wayland.h wld.h context.c\
+						 wld-private.h wayland.c Makefile pixman.c font.c buffered_surface.c renderer.h common.mk
+
+wld/libwld.a: $(wlddepends:%=wld/%)
 	$(MAKE) -C wld
 
 clean:

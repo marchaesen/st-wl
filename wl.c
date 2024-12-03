@@ -79,6 +79,9 @@ static void zoom(const Arg *);
 static void zoomabs(const Arg *);
 static void zoomreset(const Arg *);
 
+#include "patch/st_include.h"
+#include "patch/x_include.h"
+
 /* config.h for applying patches and the configuration. */
 #include "config.h"
 
@@ -144,27 +147,6 @@ typedef struct {
 	uint32_t tclick1;
 	uint32_t tclick2;
 } WlSelection;
-
-typedef struct {
-	int height;
-	int width;
-	int ascent;
-	int descent;
-	int badslant;
-	int badweight;
-	short lbearing;
-	short rbearing;
-	struct wld_font *match;
-	FcFontSet *set;
-	FcPattern *pattern;
-} Font;
-
-/* Drawing Context */
-typedef struct {
-	uint32_t *col;
-	size_t collen;
-	Font font, bfont, ifont, ibfont;
-} DC;
 
 typedef struct {
 	struct wl_cursor_theme *theme;
@@ -318,6 +300,9 @@ static char *usedfont = NULL;
 static double usedfontsize = 0;
 static double defaultfontsize = 0;
 
+#if ALPHA_PATCH
+static char *opt_alpha = NULL;
+#endif // ALPHA_PATCH
 static char *opt_class = NULL;
 static char **opt_cmd  = NULL;
 static char *opt_embed = NULL;
@@ -326,6 +311,14 @@ static char *opt_io    = NULL;
 static char *opt_line  = NULL;
 static char *opt_name  = NULL;
 static char *opt_title = NULL;
+#if WORKINGDIR_PATCH
+static char *opt_dir   = NULL;
+#endif // WORKINGDIR_PATCH
+
+#if ALPHA_PATCH && ALPHA_FOCUS_HIGHLIGHT_PATCH
+static int focused = 0;
+#endif // ALPHA_FOCUS_HIGHLIGHT_PATCH
+
 
 static int oldbutton = 3; /* button event on startup: 3 = release */
 
@@ -663,6 +656,8 @@ wlselpaste(void)
 			ttywrite("\033[201~", 6, 0);
 	}
 }
+
+#include "patch/x_include.c"
 
 void
 xclipcopy(void)
@@ -1030,7 +1025,7 @@ wlresize(int col, int row)
 
 	wld.oldbuffer = wld.buffer;
 	wld.buffer = wld_create_buffer(wld.ctx, win.w, win.h,
-			WLD_FORMAT_XRGB8888, 0);
+			WLD_FORMAT_ARGB8888, 0);
 	wld_export(wld.buffer, WLD_WAYLAND_OBJECT_BUFFER, &object);
 	wl.buffer = object.ptr;
 }
@@ -1144,6 +1139,14 @@ xloadcols(void)
 				die("Could not allocate color %d\n", i);
 		}
 
+	#if ALPHA_PATCH
+	/* set alpha value of bg color */
+	if (opt_alpha)
+  {
+		alpha = strtof(opt_alpha, NULL);
+  }
+  term_alpha = (uint8_t)(alpha*255.0);
+	#endif // ALPHA_PATCH
 	loaded = 1;
 }
 
@@ -1397,6 +1400,14 @@ xfinishdraw(void)
 	wl.needdraw = false;
 }
 
+void wltermclear(int col1, int row1, int col2, int row2) {
+  uint32_t color = dc.col[IS_SET(MODE_REVERSE) ? defaultfg : defaultbg];
+  color = (color & term_alpha << 24) | (color & 0x00FFFFFF);
+  wld_fill_rectangle(wld.renderer, color, borderpx + col1 * win.cw,
+                     borderpx + row1 * win.ch, (col2 - col1 + 1) * win.cw,
+                     (row2 - row1 + 1) * win.ch);
+}
+
 /*
  * Absolute coordinates.
  */
@@ -1404,7 +1415,7 @@ void
 wlclear(int x1, int y1, int x2, int y2)
 {
 	uint32_t color = dc.col[IS_SET(MODE_REVERSE) ? defaultfg : defaultbg];
-
+  color = (color & term_alpha << 24) | (color & 0x00FFFFFF);
 	wld_fill_rectangle(wld.renderer, color, x1, y1, x2 - x1, y2 - y1);
 }
 
@@ -1527,7 +1538,7 @@ wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
 		wlclear(winx, winy + win.ch, winx + width, win.h);
 
 	/* Clean up the region we want to draw to. */
-	wld_fill_rectangle(wld.renderer, bg, winx, winy, width, win.ch);
+	wld_fill_rectangle(wld.renderer, (bg & (term_alpha << 24)) | (bg & 0x00FFFFFF), winx, winy, width, win.ch);
 
 	for (xp = winx; bytelen > 0;) {
 		/*
@@ -2072,6 +2083,11 @@ main(int argc, char *argv[])
 		case 'a':
 			allowaltscreen = 0;
 			break;
+	#if ALPHA_PATCH
+    case 'A':
+      opt_alpha = EARGF(usage());
+		break;
+	#endif // ALPHA_PATCH
 		case 'c':
 			opt_class = EARGF(usage());
 			break;

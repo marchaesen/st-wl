@@ -173,7 +173,9 @@ unsigned int tabspaces = 8;
 
 #if ALPHA_PATCH
 /* bg opacity */
-float alpha = 0.8;
+#define DEFAULT_ALPHA 0.8
+float alpha = DEFAULT_ALPHA;
+uint8_t term_alpha = (uint8_t)(DEFAULT_ALPHA*255.0);
 #if ALPHA_GRADIENT_PATCH
 float grad_alpha = 0.54; //alpha value that'll change
 float stat_alpha = 0.46; //constant alpha value that'll get added to grad_alpha
@@ -304,58 +306,6 @@ static unsigned int mousebg = 0;
  * doesn't match the ones requested.
  */
 static unsigned int defaultattr = 11;
-
-#if XRESOURCES_PATCH
-/*
- * Xresources preferences to load at startup
- */
-ResourcePref resources[] = {
-		{ "font",         STRING,  &font },
-		{ "color0",       STRING,  &colorname[0] },
-		{ "color1",       STRING,  &colorname[1] },
-		{ "color2",       STRING,  &colorname[2] },
-		{ "color3",       STRING,  &colorname[3] },
-		{ "color4",       STRING,  &colorname[4] },
-		{ "color5",       STRING,  &colorname[5] },
-		{ "color6",       STRING,  &colorname[6] },
-		{ "color7",       STRING,  &colorname[7] },
-		{ "color8",       STRING,  &colorname[8] },
-		{ "color9",       STRING,  &colorname[9] },
-		{ "color10",      STRING,  &colorname[10] },
-		{ "color11",      STRING,  &colorname[11] },
-		{ "color12",      STRING,  &colorname[12] },
-		{ "color13",      STRING,  &colorname[13] },
-		{ "color14",      STRING,  &colorname[14] },
-		{ "color15",      STRING,  &colorname[15] },
-		{ "background",   STRING,  &colorname[258] },
-		{ "foreground",   STRING,  &colorname[259] },
-		{ "cursorColor",  STRING,  &colorname[256] },
-		{ "termname",     STRING,  &termname },
-		{ "shell",        STRING,  &shell },
-		{ "minlatency",   INTEGER, &minlatency },
-		{ "maxlatency",   INTEGER, &maxlatency },
-		{ "blinktimeout", INTEGER, &blinktimeout },
-		{ "bellvolume",   INTEGER, &bellvolume },
-		{ "tabspaces",    INTEGER, &tabspaces },
-		#if RELATIVEBORDER_PATCH
-		{ "borderperc",   INTEGER, &borderperc },
-		#else
-		{ "borderpx",     INTEGER, &borderpx },
-		#endif // RELATIVEBORDER_PATCH
-		{ "cwscale",      FLOAT,   &cwscale },
-		{ "chscale",      FLOAT,   &chscale },
-		#if ALPHA_PATCH
-		{ "alpha",        FLOAT,   &alpha },
-		#endif // ALPHA_PATCH
-		#if ALPHA_FOCUS_HIGHLIGHT_PATCH
-		{ "alphaUnfocused",FLOAT,  &alphaUnfocused },
-		#endif // ALPHA_FOCUS_HIGHLIGHT_PATCH
-		#if KEYBOARDSELECT_PATCH && REFLOW_PATCH
-		{ "highlightfg",  INTEGER, &highlightfg },
-		{ "highlightbg",  INTEGER, &highlightbg },
-		#endif // KEYBOARDSELECT_PATCH
-};
-#endif // XRESOURCES_PATCH
 
 /*
  * Force mouse select/shortcuts while mask is active (when MODE_MOUSE is set).

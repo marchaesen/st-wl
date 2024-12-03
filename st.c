@@ -3770,19 +3770,20 @@ resettitle(void)
 void
 drawregion(int x1, int y1, int x2, int y2)
 {
-	int y;
+  int y;
 
-	for (y = y1; y < y2; y++) {
-		if (!term.dirty[y])
-			continue;
+  for (y = y1; y < y2; y++) {
+    if (!term.dirty[y])
+      continue;
 
-		term.dirty[y] = 0;
-		#if SCROLLBACK_PATCH || REFLOW_PATCH
-		xdrawline(TLINE(y), x1, y, x2);
-		#else
-		xdrawline(term.line[y], x1, y, x2);
-		#endif // SCROLLBACK_PATCH
-	}
+    wltermclear(0, y, term.col, y);
+    term.dirty[y] = 0;
+#if SCROLLBACK_PATCH || REFLOW_PATCH
+    xdrawline(TLINE(y), x1, y, x2);
+#else
+    xdrawline(term.line[y], x1, y, x2);
+#endif // SCROLLBACK_PATCH
+  }
 }
 
 #include "patch/st_include.c"
