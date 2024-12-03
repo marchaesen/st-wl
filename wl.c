@@ -29,6 +29,7 @@ static char *argv0;
 #include "st.h"
 #include "win.h"
 #include "xdg-shell-client-protocol.h"
+#include "xdg-decoration-protocol.h"
 
 #define DRAW_BUF_SIZ  20*1024
 
@@ -128,6 +129,7 @@ typedef struct {
 	struct xdg_wm_base *wm;
 	struct xdg_surface *xdgsurface;
 	struct xdg_toplevel *xdgtoplevel;
+  struct zxdg_decoration_manager_v1 *decoration_manager;
 	XKB xkb;
 	bool configured;
 	int px, py; /* pointer x and y */
@@ -1766,22 +1768,37 @@ void
 regglobal(void *data, struct wl_registry *registry, uint32_t name,
 		const char *interface, uint32_t version)
 {
-	if (strcmp(interface, "wl_compositor") == 0) {
+	if (strcmp(interface, "wl_compositor") == 0)
+  {
 		wl.cmp = wl_registry_bind(registry, name, &wl_compositor_interface, 3);
-	} else if (strcmp(interface, "xdg_wm_base") == 0) {
+	}
+  else if (strcmp(interface, "xdg_wm_base") == 0)
+  {
 		wl.wm = wl_registry_bind(registry, name, &xdg_wm_base_interface, 1);
 		xdg_wm_base_add_listener(wl.wm, &wmlistener, NULL);
-	} else if (strcmp(interface, "wl_shm") == 0) {
+	}
+  else if (strcmp(interface, "wl_shm") == 0)
+  {
 		wl.shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
-	} else if (strcmp(interface, "wl_seat") == 0) {
+	}
+  else if (strcmp(interface, "wl_seat") == 0)
+  {
 		wl.seat = wl_registry_bind(registry, name, &wl_seat_interface, 4);
-	} else if (strcmp(interface, "wl_data_device_manager") == 0) {
+	}
+  else if (strcmp(interface, "wl_data_device_manager") == 0)
+  {
 		wl.datadevmanager = wl_registry_bind(registry, name,
 				&wl_data_device_manager_interface, 1);
-	} else if (strcmp(interface, "wl_output") == 0) {
+	}
+  else if (strcmp(interface, "wl_output") == 0)
+  {
 		/* bind to outputs so we can get surface enter events */
 		wl_registry_bind(registry, name, &wl_output_interface, 2);
 	}
+  else if (strcmp(interface, "zxdg_decoration_manager_v1") == 0)
+  {
+		wl.decoration_manager=wl_registry_bind(registry, name, &zxdg_decoration_manager_v1_interface, 1);
+  }
 }
 
 void
@@ -1890,6 +1907,8 @@ wlinit(int cols, int rows)
 		die("Display has no data device manager\n");
 	if (!wl.wm)
 		die("Display has no window manager\n");
+	if (!wl.decoration_manager)
+		die("Display has no decoration manager\n");
 
 	wl.keyboard = wl_seat_get_keyboard(wl.seat);
 	wl_keyboard_add_listener(wl.keyboard, &kbdlistener, NULL);
@@ -1921,6 +1940,9 @@ wlinit(int cols, int rows)
 	wl.xdgtoplevel = xdg_surface_get_toplevel(wl.xdgsurface);
 	xdg_toplevel_add_listener(wl.xdgtoplevel, &xdgtoplevellistener, NULL);
 	xdg_toplevel_set_app_id(wl.xdgtoplevel, opt_class ? opt_class : termname);
+
+  struct zxdg_toplevel_decoration_v1 *decoration = zxdg_decoration_manager_v1_get_toplevel_decoration(wl.decoration_manager, wl.xdgtoplevel);
+  zxdg_toplevel_decoration_v1_set_mode(decoration, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
 
 	wl_surface_commit(wl.surface);
 

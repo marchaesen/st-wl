@@ -3,7 +3,7 @@
 
 include config.mk
 
-SRC = st.c wl.c xdg-shell-protocol.c $(LIGATURES_C) # $(SIXEL_C)
+SRC = st.c wl.c xdg-shell-protocol.c xdg-decoration-protocol.c $(LIGATURES_C) # $(SIXEL_C)
 OBJ = $(SRC:.c=.o)
 
 all: options st-wl
@@ -28,11 +28,20 @@ xdg-shell-client-protocol.h:
 	@echo GEN $@
 	@wayland-scanner client-header $(XDG_SHELL_PROTO) $@
 
+xdg-decoration-protocol.c:
+	@echo GEN $@
+	@wayland-scanner private-code $(XDG_DECORATION_PROTO) $@
+
+xdg-decoration-protocol.h:
+	@echo GEN $@
+	@wayland-scanner client-header $(XDG_DECORATION_PROTO) $@
+
+
 .c.o:
 	$(CC) $(STCFLAGS) -c $<
 
 st.o: config.h st.h win.h
-wl.o: arg.h config.h st.h win.h xdg-shell-client-protocol.h $(LIGATURES_H)
+wl.o: arg.h config.h st.h win.h xdg-shell-client-protocol.h xdg-decoration-protocol.h $(LIGATURES_H)
 
 $(OBJ): config.h config.mk patches.h
 

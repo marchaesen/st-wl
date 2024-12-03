@@ -12,6 +12,7 @@ ICONNAME = st.png
 PKG_CONFIG = pkg-config
 PKGCFG = fontconfig wayland-client wayland-cursor xkbcommon pixman-1 libdrm_intel libdrm_nouveau
 XDG_SHELL_PROTO = `$(PKG_CONFIG) --variable=pkgdatadir wayland-protocols`/stable/xdg-shell/xdg-shell.xml
+XDG_DECORATION_PROTO = `$(PKG_CONFIG) --variable=pkgdatadir wayland-protocols`/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml
 
 PKG_CONFIG = pkg-config
 
@@ -47,8 +48,8 @@ LIBS = -L/usr/lib -lc -lm -lrt -lutil `$(PKG_CONFIG) --libs ${PKGCFG}`\
 
 # flags
 STCPPFLAGS = -DVERSION=\"$(VERSION)\" -DICON=\"$(ICONPREFIX)/$(ICONNAME)\" -D_XOPEN_SOURCE=700 -DWITH_WAYLAND_DRM -DWITH_WAYLAND_SHM
-#STCFLAGS = -O3 $(INCS) $(STCPPFLAGS) $(CPPFLAGS) $(CFLAGS)
-STCFLAGS = -O0 -g $(INCS) $(STCPPFLAGS) $(CPPFLAGS) $(CFLAGS)
+STCFLAGS = -O3 $(INCS) $(STCPPFLAGS) $(CPPFLAGS) $(CFLAGS)
+#STCFLAGS = -O0 -g $(INCS) $(STCPPFLAGS) $(CPPFLAGS) $(CFLAGS)
 STLDFLAGS = wld/libwld.a $(LIBS) $(LDFLAGS)
 
 # OpenBSD:
