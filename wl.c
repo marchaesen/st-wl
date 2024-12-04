@@ -319,6 +319,9 @@ static char *opt_dir   = NULL;
 static int focused = 0;
 #endif // ALPHA_FOCUS_HIGHLIGHT_PATCH
 
+#if BLINKING_CURSOR_PATCH
+static int cursorblinks = 0;
+#endif // BLINKING_CURSOR_PATCH
 
 static int oldbutton = 3; /* button event on startup: 3 = release */
 
@@ -352,10 +355,26 @@ numlock(const Arg *dummy)
 int
 xsetcursor(int cursor)
 {
-	DEFAULT(cursor, 1);
-	if (!BETWEEN(cursor, 0, 6))
+	#if BLINKING_CURSOR_PATCH
+	if (!BETWEEN(cursor, 0, 8)) /* 7-8: st extensions */
+	#else
+	if (!BETWEEN(cursor, 0, 7)) /* 7: st extension */
+	#endif // BLINKING_CURSOR_PATCH
 		return 1;
+	#if DEFAULT_CURSOR_PATCH
+	#if BLINKING_CURSOR_PATCH
+	win.cursor = (cursor ? cursor : cursorstyle);
+	#else
+	win.cursor = (cursor ? cursor : cursorshape);
+	#endif // BLINKING_CURSOR_PATCH
+	#else
 	win.cursor = cursor;
+	#endif // DEFAULT_CURSOR_PATCH
+	#if BLINKING_CURSOR_PATCH
+	cursorblinks = win.cursor == 0 || win.cursor == 1 ||
+	               win.cursor == 3 || win.cursor == 5 ||
+	               win.cursor == 7;
+	#endif // BLINKING_CURSOR_PATCH
 	return 0;
 }
 
@@ -1731,44 +1750,104 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 	/* draw the new one */
 	if (IS_SET(MODE_FOCUSED)) {
 		switch (win.cursor) {
+		  #if !BLINKING_CURSOR_PATCH
 			case 7: /* st-wl extension: snowman */
 				g.u = 0x2603;
+			/* FALLTHROUGH */
+		  #endif // BLINKING_CURSOR_PATCH
 			case 0: /* Blinking Block */
 			case 1: /* Blinking Block (Default) */
+			  #if BLINKING_CURSOR_PATCH
+			  if (IS_SET(MODE_BLINK))
+				  break;
+			  /* FALLTHROUGH */
+			  #endif // BLINKING_CURSOR_PATCH
 			case 2: /* Steady Block */
 				wldrawglyph(g, cx, cy);
 				break;
 			case 3: /* Blinking Underline */
+			  #if BLINKING_CURSOR_PATCH
+			  if (IS_SET(MODE_BLINK))
+			  	break;
+			  /* FALLTHROUGH */
+			  #endif // BLINKING_CURSOR_PATCH
 			case 4: /* Steady Underline */
+			  #if ANYSIZE_PATCH
 				wld_fill_rectangle(wld.renderer, drawcol,
-						borderpx + cx * win.cw,
-						borderpx + (cy + 1) * win.ch - cursorthickness,
+						win.hborderpx + cx * win.cw,
+						win.vborderpx + (cy + 1) * win.ch - cursorthickness,
 						win.cw, cursorthickness);
+			  #else
+			  wld_fill_rectangle(wld.renderer, drawcol,
+					borderpx + cx * win.cw,
+					borderpx + (cy + 1) * win.ch - cursorthickness,
+					win.cw, cursorthickness);
+			  #endif // ANYSIZE_PATCH
 				break;
 			case 5: /* Blinking bar */
+			#if BLINKING_CURSOR_PATCH
+			if (IS_SET(MODE_BLINK))
+				break;
+			/* FALLTHROUGH */
+			#endif // BLINKING_CURSOR_PATCH
 			case 6: /* Steady bar */
 				wld_fill_rectangle(wld.renderer, drawcol,
+					  #if ANYSIZE_PATCH
+  					win.hborderpx + cx * win.cw,
+	  				win.vborderpx + cy * win.ch,
+		  			#else
 						borderpx + cx * win.cw,
 						borderpx + cy * win.ch,
+            #endif
 						cursorthickness, win.ch);
 				break;
+		#if BLINKING_CURSOR_PATCH
+		case 7: /* Blinking st cursor */
+			if (IS_SET(MODE_BLINK))
+				break;
+			/* FALLTHROUGH */
+		case 8: /* Steady st cursor */
+			g.u = stcursor;
+	    wldrawglyph(g, cx, cy);
+			break;
+		#endif // BLINKING_CURSOR_PATCH
 		}
 	} else {
 		wld_fill_rectangle(wld.renderer, drawcol,
+				#if ANYSIZE_PATCH
+				win.hborderpx + cx * win.cw,
+				win.vborderpx + cy * win.ch,
+				#else
 				borderpx + cx * win.cw,
 				borderpx + cy * win.ch,
+				#endif // ANYSIZE_PATCH
 				win.cw - 1, 1);
 		wld_fill_rectangle(wld.renderer, drawcol,
+				#if ANYSIZE_PATCH
+				win.hborderpx + cx * win.cw,
+				win.vborderpx + cy * win.ch,
+				#else
 				borderpx + cx * win.cw,
 				borderpx + cy * win.ch,
+				#endif // ANYSIZE_PATCH
 				1, win.ch - 1);
 		wld_fill_rectangle(wld.renderer, drawcol,
+				#if ANYSIZE_PATCH
+				win.hborderpx + (cx + 1) * win.cw - 1,
+				win.vborderpx + cy * win.ch,
+				#else
 				borderpx + (cx + 1) * win.cw - 1,
 				borderpx + cy * win.ch,
+				#endif // ANYSIZE_PATCH
 				1, win.ch - 1);
 		wld_fill_rectangle(wld.renderer, drawcol,
+				#if ANYSIZE_PATCH
+				win.hborderpx + cx * win.cw,
+				win.vborderpx + (cy + 1) * win.ch - 1,
+				#else
 				borderpx + cx * win.cw,
 				borderpx + (cy + 1) * win.ch - 1,
+				#endif // ANYSIZE_PATCH
 				win.cw, 1);
 	}
 	wl_surface_damage(wl.surface, borderpx + cx * win.cw,
@@ -1985,8 +2064,6 @@ run(void)
 	if (!(IS_SET(MODE_VISIBLE)))
 		win.mode |= MODE_VISIBLE;
 
-	draw();
-
 	clock_gettime(CLOCK_MONOTONIC, &last);
 	lastblink = last;
 
@@ -2018,7 +2095,11 @@ run(void)
 		clock_gettime(CLOCK_MONOTONIC, &now);
 		msecs = -1;
 
+		#if BLINKING_CURSOR_PATCH
+		if ((blinkset||cursorblinks) && blinktimeout) {
+    #else
 		if (blinkset && blinktimeout) {
+    #endif
 			if (TIMEDIFF(now, lastblink) >= blinktimeout) {
 				tsetdirtattr(ATTR_BLINK);
 				win.mode ^= MODE_BLINK;
@@ -2042,11 +2123,7 @@ run(void)
 			}
 		}
 
-		if (wl.needdraw && IS_SET(MODE_VISIBLE)) {
-			if (!wl.framecb) {
-				draw();
-			}
-		}
+		draw();
 
 		if (msecs == -1) {
 			tv = NULL;
@@ -2077,7 +2154,11 @@ usage(void)
 int
 main(int argc, char *argv[])
 {
-	win.cursor = cursorshape;
+	#if BLINKING_CURSOR_PATCH
+	xsetcursor(cursorstyle);
+	#else
+	xsetcursor(cursorshape);
+	#endif // BLINKING_CURSOR_PATCH
 
 	ARGBEGIN {
 		case 'a':
