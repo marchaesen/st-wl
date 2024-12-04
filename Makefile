@@ -3,6 +3,10 @@
 
 include config.mk
 
+ifdef DEBUG
+DEBUGFLAGS=-O0 -g
+endif
+
 SRC = st.c wl.c xdg-shell-protocol.c xdg-decoration-protocol.c $(LIGATURES_C) # $(SIXEL_C)
 OBJ = $(SRC:.c=.o)
 
@@ -53,7 +57,7 @@ wlddepends:= wayland-private.h surface.c color.c buffer.c interface/context.h in
 						 wld-private.h wayland.c Makefile pixman.c font.c buffered_surface.c renderer.h common.mk
 
 wld/libwld.a: $(wlddepends:%=wld/%)
-	$(MAKE) -C wld
+	DEBUGFLAGS="$(DEBUGFLAGS)" $(MAKE) -C wld
 
 clean:
 	rm -f st-wl $(OBJ) st-wl-$(VERSION).tar.gz xdg-shell-*
