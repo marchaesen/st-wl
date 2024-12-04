@@ -483,7 +483,7 @@ void
 ptrmotion(void *data, struct wl_pointer * pointer, uint32_t serial,
 		wl_fixed_t x, wl_fixed_t y)
 {
-	if (IS_SET(MODE_MOUSE)) {
+	if (IS_SET(MODE_MOUSE) && !(wl.xkb.mods & forceselmod)) {
 		wlmousereportmotion(x, y);
 		return;
 	}
