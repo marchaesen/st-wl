@@ -10,7 +10,7 @@ endif
 SRC = st.c wl.c xdg-shell-protocol.c xdg-decoration-protocol.c $(LIGATURES_C) # $(SIXEL_C)
 OBJ = $(SRC:.c=.o)
 
-all: options st-wl
+all: st-wl
 
 options:
 	@echo st-wl build options:
@@ -40,17 +40,28 @@ xdg-decoration-protocol.h:
 	@echo GEN $@
 	@wayland-scanner client-header $(XDG_DECORATION_PROTO) $@
 
+ifeq ($(if $(V),$(V),0), 0)
+    define quiet
+        @echo "  $1	$@"
+        @$(if $2,$2,$($1))
+    endef
+else
+    quiet = $(if $2,$2,$($1))
+endif
+
 
 .c.o:
-	$(CC) $(STCFLAGS) -c $<
+	$(call quiet,CC) $(STCFLAGS) -c $<
 
 st.o: config.h st.h win.h
 wl.o: arg.h config.h st.h win.h xdg-shell-client-protocol.h xdg-decoration-protocol.h $(LIGATURES_H)
 
 $(OBJ): config.h config.mk patches.h
 
+wld/libwld.a config.h config.mk patches.h: options
+
 st-wl: wld/libwld.a $(OBJ)
-	$(CC) $(STCFLAGS) -o $@ $(OBJ) $(STLDFLAGS)
+	$(call quiet,CC) $(STCFLAGS) -o $@ $(OBJ) $(STLDFLAGS)
 
 wlddepends:= wayland-private.h surface.c color.c buffer.c interface/context.h interface/buffer.h\
 						 interface/surface.h pixman.h config.mk renderer.c wayland-shm.c wayland.h wld.h context.c\
