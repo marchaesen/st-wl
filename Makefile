@@ -17,6 +17,7 @@ options:
 	@echo "CFLAGS  = $(STCFLAGS)"
 	@echo "LDFLAGS = $(STLDFLAGS)"
 	@echo "CC      = $(CC)"
+	@touch options
 
 config.h: config.def.h
 	cp config.def.h config.h
@@ -69,7 +70,7 @@ wlddepends:= wayland-private.h surface.c color.c buffer.c interface/context.h in
 						 wld-private.h wayland.c Makefile pixman.c font.c buffered_surface.c renderer.h common.mk
 
 wld/libwld.a: $(wlddepends:%=wld/%)
-	DEBUGFLAGS="$(DEBUGFLAGS)" $(MAKE) -C wld
+	@DEBUGFLAGS="$(DEBUGFLAGS)" $(MAKE) -C wld
 
 clean:
 	rm -f st-wl $(OBJ) st-wl-$(VERSION).tar.gz xdg-shell-*
@@ -99,4 +100,4 @@ uninstall:
 	rm -f $(DESTDIR)$(MANPREFIX)/man1/st-wl.1
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/st-wl.desktop # desktop-entry patch
 
-.PHONY: all options clean dist install uninstall
+.PHONY: all clean dist install uninstall
