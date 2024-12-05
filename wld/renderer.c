@@ -23,6 +23,7 @@
 
 #include "wld-private.h"
 #include "renderer.h"
+#include "buffered_surface.h"
 
 void renderer_initialize(struct wld_renderer * renderer)
 {
@@ -60,7 +61,7 @@ bool wld_set_target_surface(struct wld_renderer * renderer,
 {
     struct buffer * back_buffer;
 
-    if (!(back_buffer = surface->impl->back(surface)))
+    if (!(back_buffer = surface_back(surface)))
         return false;
 
     return renderer_set_target(renderer, back_buffer);

@@ -22,6 +22,7 @@
  */
 
 #include "wld-private.h"
+#include "buffered_surface.h"
 
 struct wld_surface * default_create_surface(struct wld_context * context,
                                             uint32_t width, uint32_t height,
@@ -30,41 +31,10 @@ struct wld_surface * default_create_surface(struct wld_context * context,
     return buffered_surface_create(context, width, height, format, flags, NULL);
 }
 
-void surface_initialize(struct wld_surface * surface,
-                        const struct wld_surface_impl * impl)
-{
-    *((const struct wld_surface_impl **) &surface->impl) = impl;
-}
-
-EXPORT
-pixman_region32_t * wld_surface_damage(struct wld_surface * surface,
-                                       pixman_region32_t * new_damage)
-{
-    return surface->impl->damage(surface, new_damage);
-}
-
-EXPORT
-struct wld_buffer * wld_surface_take(struct wld_surface * surface)
-{
-    return &surface->impl->take(surface)->base;
-}
-
 EXPORT
 void wld_surface_release(struct wld_surface * surface,
                          struct wld_buffer * buffer)
 {
-    surface->impl->release(surface, (struct buffer *) buffer);
-}
-
-EXPORT
-bool wld_swap(struct wld_surface * surface)
-{
-    return surface->impl->swap(surface);
-}
-
-EXPORT
-void wld_destroy_surface(struct wld_surface * surface)
-{
-    surface->impl->destroy(surface);
+    surface_release(surface, (struct buffer *) buffer);
 }
 

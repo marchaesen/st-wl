@@ -209,20 +209,19 @@ void wld_buffer_unreference(struct wld_buffer * buffer);
 
 struct wld_surface
 {
-    const struct wld_surface_impl * const impl;
+    struct wld_context * context;
+    struct buffer_entry * entries, * back;
+    unsigned entries_size, entries_capacity;
+
+    struct buffer_socket * buffer_socket;
+
+    uint32_t width, height;
+    enum wld_format format;
+    uint32_t flags;
 };
-
-pixman_region32_t * wld_surface_damage(struct wld_surface * surface,
-                                       pixman_region32_t * new_damage);
-
-struct wld_buffer * wld_surface_take(struct wld_surface * surface);
 
 void wld_surface_release(struct wld_surface * surface,
                          struct wld_buffer * buffer);
-
-bool wld_swap(struct wld_surface * surface);
-
-void wld_destroy_surface(struct wld_surface * surface);
 
 /**** Renderers ****/
 

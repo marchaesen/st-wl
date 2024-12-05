@@ -112,17 +112,6 @@ struct wld_buffer_impl
     void (* destroy)(struct buffer * buffer);
 };
 
-struct wld_surface_impl
-{
-    pixman_region32_t * (* damage)(struct wld_surface * surface,
-                                   pixman_region32_t * damage);
-    struct buffer * (* back)(struct wld_surface * surface);
-    struct buffer * (* take)(struct wld_surface * surface);
-    bool (* release)(struct wld_surface * surface, struct buffer * buffer);
-    bool (* swap)(struct wld_surface * surface);
-    void (* destroy)(struct wld_surface * surface);
-};
-
 struct buffer_socket
 {
     const struct buffer_socket_impl * impl;
@@ -209,9 +198,6 @@ void buffer_initialize(struct buffer * buffer,
                        const struct wld_buffer_impl * impl,
                        uint32_t width, uint32_t height,
                        uint32_t format, uint32_t pitch);
-
-void surface_initialize(struct wld_surface * surface,
-                        const struct wld_surface_impl * impl);
 
 #endif
 

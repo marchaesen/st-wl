@@ -70,7 +70,7 @@ st-wl: $(THISDIR)wld/libwld.a $(OBJ)
 	$(call quiet,CC) $(STCFLAGS) -o $@ $(OBJ) $(STLDFLAGS)
 
 $(THISDIR)wld/%.o:
-	@rm $@
+	@rm -f $@
 
 $(THISDIR)wld/libwld.a:
 	@DEBUGFLAGS="$(DEBUGFLAGS)" $(MAKE) -C wld
