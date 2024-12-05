@@ -50,33 +50,14 @@ struct wld_font_context * wld_font_create_context()
     return NULL;
 }
 
+/* curently not used
 EXPORT
 void wld_font_destroy_context(struct wld_font_context * context)
 {
     FT_Done_FreeType(context->library);
     free(context);
 }
-
-EXPORT
-struct wld_font * wld_font_open_name(struct wld_font_context * context,
-                                     const char * name)
-{
-    FcPattern * pattern, * match;
-    FcResult result;
-
-    DEBUG("Opening font with name: %s\n", name);
-
-    pattern = FcNameParse((const FcChar8 *) name);
-    FcConfigSubstitute(NULL, pattern, FcMatchPattern);
-    FcDefaultSubstitute(pattern);
-
-    match = FcFontMatch(NULL, pattern, &result);
-
-    if (!match)
-        return NULL;
-
-    return wld_font_open_pattern(context, match);
-}
+*/
 
 EXPORT
 struct wld_font * wld_font_open_pattern(struct wld_font_context * context,

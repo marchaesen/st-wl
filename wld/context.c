@@ -43,28 +43,3 @@ struct wld_buffer * wld_create_buffer(struct wld_context * context,
     return &context->impl->create_buffer(context, width, height,
                                          format, flags)->base;
 }
-
-EXPORT
-struct wld_buffer * wld_import_buffer(struct wld_context * context,
-                                      uint32_t type, union wld_object object,
-                                      uint32_t width, uint32_t height,
-                                      uint32_t format, uint32_t pitch)
-{
-    return &context->impl->import_buffer(context, type, object,
-                                         width, height, format, pitch)->base;
-}
-
-EXPORT
-struct wld_surface * wld_create_surface(struct wld_context * context,
-                                        uint32_t width, uint32_t height,
-                                        uint32_t format, uint32_t flags)
-{
-    return context->impl->create_surface(context, width, height, format, flags);
-}
-
-EXPORT
-void wld_destroy_context(struct wld_context * context)
-{
-    context->impl->destroy(context);
-}
-

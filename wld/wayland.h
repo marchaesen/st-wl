@@ -55,11 +55,6 @@ bool wayland_has_format(struct wld_context * context, uint32_t format);
 struct wld_context * wld_wayland_create_context
     (struct wl_display * display, ...);
 
-struct wld_surface * wld_wayland_create_surface(struct wld_context * context,
-                                                uint32_t width, uint32_t height,
-                                                uint32_t format, uint32_t flags,
-                                                struct wl_surface * surface);
-
 /**
  * Check if the wayland implementation supports a particular pixel format.
  *

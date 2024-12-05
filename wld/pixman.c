@@ -123,48 +123,8 @@ struct buffer * context_create_buffer(struct wld_context * context,
     return NULL;
 }
 
-struct buffer * context_import_buffer(struct wld_context * context,
-                                      uint32_t type, union wld_object object,
-                                      uint32_t width, uint32_t height,
-                                      uint32_t format, uint32_t pitch)
-{
-    struct buffer * buffer;
-    pixman_image_t * image;
-
-    switch (type)
-    {
-        case WLD_OBJECT_DATA:
-            image = pixman_image_create_bits(format_wld_to_pixman(format),
-                                             width, height, object.ptr, pitch);
-            break;
-        default: image = NULL;
-    }
-
-    if (!image)
-        goto error0;
-
-    if (!(buffer = new_buffer(image)))
-        goto error1;
-
-    return buffer;
-
-  error1:
-    pixman_image_unref(image);
-  error0:
-    return NULL;
-
-}
-
 void context_destroy(struct wld_context * context)
 {
-}
-
-uint32_t renderer_capabilities(struct wld_renderer * renderer,
-                               struct buffer * buffer)
-{
-    /* The pixman renderer can read and write to any buffer using it's map
-     * implementation. */
-    return WLD_CAPABILITY_READ | WLD_CAPABILITY_WRITE;
 }
 
 static void destroy_image(pixman_image_t * image, void * data)
@@ -279,20 +239,6 @@ void renderer_fill_region(struct wld_renderer * base, uint32_t color,
     boxes = pixman_region32_rectangles(region, &num_boxes);
     pixman_image_fill_boxes(PIXMAN_OP_SRC, renderer->target,
                             &pixman_color, num_boxes, boxes);
-}
-
-void renderer_copy_rectangle(struct wld_renderer * base, struct buffer * buffer,
-                             int32_t dst_x, int32_t dst_y,
-                             int32_t src_x, int32_t src_y,
-                             uint32_t width, uint32_t height)
-{
-    struct pixman_renderer * renderer = (struct pixman_renderer *)base;
-    pixman_image_t * src = pixman_image(buffer), * dst = renderer->target;
-
-    if (!src) return;
-
-    pixman_image_composite32(PIXMAN_OP_SRC, src, NULL, dst,
-                             src_x, src_y, 0, 0, dst_x, dst_y, width, height);
 }
 
 void renderer_copy_region(struct wld_renderer * base, struct buffer * buffer,

@@ -209,14 +209,6 @@ struct buffer * context_create_buffer(struct wld_context * base,
     return NULL;
 }
 
-struct buffer * context_import_buffer(struct wld_context * context,
-                                      uint32_t type, union wld_object object,
-                                      uint32_t width, uint32_t height,
-                                      uint32_t format, uint32_t pitch)
-{
-    return NULL;
-}
-
 void context_destroy(struct wld_context * base)
 {
     struct shm_context * context = shm_context(base);

@@ -28,7 +28,6 @@ WLD_SOURCES =           \
     $(THISDIR)context.c           \
     $(THISDIR)font.c              \
     $(THISDIR)renderer.c          \
-    $(THISDIR)surface.c           \
     $(THISDIR)pixman.c            \
     $(THISDIR)wayland.c           \
     $(THISDIR)wayland-shm.c

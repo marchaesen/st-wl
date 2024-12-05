@@ -80,17 +80,6 @@ struct wld_buffer * wld_create_buffer(struct wld_context * context,
                                       uint32_t width, uint32_t height,
                                       uint32_t format, uint32_t flags);
 
-struct wld_buffer * wld_import_buffer(struct wld_context * context,
-                                      uint32_t type, union wld_object object,
-                                      uint32_t width, uint32_t height,
-                                      uint32_t format, uint32_t pitch);
-
-struct wld_surface * wld_create_surface(struct wld_context * context,
-                                        uint32_t width, uint32_t height,
-                                        uint32_t format, uint32_t flags);
-
-void wld_destroy_context(struct wld_context * context);
-
 /**** Font Handling ****/
 
 struct wld_extents
@@ -122,12 +111,6 @@ void wld_font_destroy_context(struct wld_font_context * context);
  */
 struct wld_font * wld_font_open_pattern(struct wld_font_context * context,
                                         FcPattern * match);
-
-/**
- * Open a new font from a fontconfig pattern string.
- */
-struct wld_font * wld_font_open_name(struct wld_font_context * context,
-                                     const char * name);
 
 /**
  * Close a font.
@@ -194,11 +177,6 @@ void wld_buffer_add_destructor(struct wld_buffer * buffer,
                                struct wld_destructor * destructor);
 
 /**
- * Increase the reference count of a buffer.
- */
-void wld_buffer_reference(struct wld_buffer * buffer);
-
-/**
  * Decrease the reference count of a buffer.
  *
  * When the reference count drops to zero, the buffer will be destroyed.
@@ -236,28 +214,11 @@ enum wld_capability
     WLD_CAPABILITY_WRITE    = 1<<1,
 };
 
-void wld_destroy_renderer(struct wld_renderer * renderer);
-
-uint32_t wld_capabilities(struct wld_renderer * renderer,
-                          struct wld_buffer * buffer);
-
 bool wld_set_target_buffer(struct wld_renderer * renderer,
                            struct wld_buffer * buffer);
 
-bool wld_set_target_surface(struct wld_renderer * renderer,
-                            struct wld_surface * surface);
-
 void wld_fill_rectangle(struct wld_renderer * renderer, uint32_t color,
                         int32_t x, int32_t y, uint32_t width, uint32_t height);
-
-void wld_fill_region(struct wld_renderer * renderer, uint32_t color,
-                     pixman_region32_t * region);
-
-void wld_copy_rectangle(struct wld_renderer * renderer,
-                        struct wld_buffer * buffer,
-                        int32_t dst_x, int32_t dst_y,
-                        int32_t src_x, int32_t src_y,
-                        uint32_t width, uint32_t height);
 
 void wld_copy_region(struct wld_renderer * renderer,
                      struct wld_buffer * buffer,

@@ -30,18 +30,13 @@ void renderer_initialize(struct wld_renderer * renderer)
     renderer->target = NULL;
 }
 
+/* not used
 EXPORT
 void wld_destroy_renderer(struct wld_renderer * renderer)
 {
     renderer_destroy(renderer);
 }
-
-EXPORT
-uint32_t wld_capabilities(struct wld_renderer * renderer,
-                          struct wld_buffer * buffer)
-{
-    return renderer_capabilities(renderer, (struct buffer *) buffer);
-}
+*/
 
 EXPORT
 bool wld_set_target_buffer(struct wld_renderer * renderer,
@@ -56,40 +51,10 @@ bool wld_set_target_buffer(struct wld_renderer * renderer,
 }
 
 EXPORT
-bool wld_set_target_surface(struct wld_renderer * renderer,
-                            struct wld_surface * surface)
-{
-    struct buffer * back_buffer;
-
-    if (!(back_buffer = surface_back(surface)))
-        return false;
-
-    return renderer_set_target(renderer, back_buffer);
-}
-
-EXPORT
 void wld_fill_rectangle(struct wld_renderer * renderer, uint32_t color,
                         int32_t x, int32_t y, uint32_t width, uint32_t height)
 {
     renderer_fill_rectangle(renderer, color, x, y, width, height);
-}
-
-EXPORT
-void wld_fill_region(struct wld_renderer * renderer, uint32_t color,
-                     pixman_region32_t * region)
-{
-    renderer_fill_region(renderer, color, region);
-}
-
-EXPORT
-void wld_copy_rectangle(struct wld_renderer * renderer,
-                        struct wld_buffer * buffer,
-                        int32_t dst_x, int32_t dst_y,
-                        int32_t src_x, int32_t src_y,
-                        uint32_t width, uint32_t height)
-{
-    renderer_copy_rectangle(renderer, (struct buffer *) buffer,
-                                   dst_x, dst_y, src_x, src_y, width, height);
 }
 
 EXPORT

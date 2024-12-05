@@ -105,14 +105,6 @@ void wld_buffer_add_destructor(struct wld_buffer * base,
 }
 
 EXPORT
-void wld_buffer_reference(struct wld_buffer * base)
-{
-    struct buffer * buffer = (void *) base;
-
-    ++buffer->references;
-}
-
-EXPORT
 void wld_buffer_unreference(struct wld_buffer * base)
 {
     struct buffer * buffer = (void *) base;
