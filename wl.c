@@ -1608,7 +1608,7 @@ wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
 	#if ANYSIZE_PATCH
 	if (x == 0) {
 		wlclear(0, (y == 0)? 0 : winy, win.hborderpx,
-				((winy + win.ch >= win.vborderpx + win.th)? win.h : 0));
+				((winy + win.ch >= win.vborderpx + win.th)? win.h : (winy + win.ch)));
 	}
 	if (winx + width >= win.hborderpx + win.tw) {
 		wlclear(winx + width, (y == 0)? 0 : winy, win.w,
@@ -1621,7 +1621,7 @@ wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
 	#else
 	if (x == 0) {
 		wlclear(0, (y == 0)? 0 : winy, borderpx,
-				((winy + win.ch >= borderpx + win.th)? win.h : 0));
+				((winy + win.ch >= borderpx + win.th)? win.h : (winy + win.ch)));
 	}
 	if (winx + width >= borderpx + win.tw) {
 		wlclear(winx + width, (y == 0)? 0 : winy, win.w,
