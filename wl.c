@@ -139,6 +139,7 @@ typedef struct {
 	struct wl_callback * framecb;
 	uint32_t globalserial; /* global event serial */
 	bool needdraw;
+  bool resized;
 } Wayland;
 
 typedef struct {
@@ -381,7 +382,11 @@ xsetcursor(int cursor)
 int
 evcol(int x)
 {
+	#if ANYSIZE_PATCH
+	x -= win.hborderpx;
+	#else
 	x -= borderpx;
+	#endif // ANYSIZE_PATCH
 	LIMIT(x, 0, win.tw - 1);
 	return x / win.cw;
 }
@@ -389,7 +394,11 @@ evcol(int x)
 int
 evrow(int y)
 {
+	#if ANYSIZE_PATCH
+	y -= win.vborderpx;
+	#else
 	y -= borderpx;
+	#endif // ANYSIZE_PATCH
 	LIMIT(y, 0, win.th - 1);
 	return y / win.ch;
 }
@@ -875,6 +884,31 @@ kbdkey(void *data, struct wl_keyboard *keyboard, uint32_t serial, uint32_t time,
 	Rune c;
 	Shortcut *bp;
 
+	#if HIDECURSOR_PATCH
+	if (xw.pointerisvisible && hidecursor) {
+		#if OPENURLONCLICK_PATCH
+		#if ANYSIZE_PATCH
+		int x = e->x - win.hborderpx;
+		int y = e->y - win.vborderpx;
+		#else
+		int x = e->x - borderpx;
+		int y = e->y - borderpx;
+		#endif // ANYSIZE_PATCH
+		LIMIT(x, 0, win.tw - 1);
+		LIMIT(y, 0, win.th - 1);
+		if (!detecturl(x / win.cw, y / win.ch, 0)) {
+			XDefineCursor(xw.dpy, xw.win, xw.bpointer);
+			xsetpointermotion(1);
+			xw.pointerisvisible = 0;
+		}
+		#else
+		XDefineCursor(xw.dpy, xw.win, xw.bpointer);
+		xsetpointermotion(1);
+		xw.pointerisvisible = 0;
+		#endif // OPENURLONCLICK_PATCH
+	}
+	#endif // HIDECURSOR_PATCH
+
 	if (IS_SET(MODE_KBDLOCK))
 		return;
 
@@ -992,6 +1026,11 @@ cresize(int width, int height)
 	col = MAX(1, col);
 	row = MAX(1, row);
 
+	#if ANYSIZE_PATCH
+	win.hborderpx = (win.w - col * win.cw) / 2;
+	win.vborderpx = (win.h - row * win.ch) / 2;
+	#endif // ANYSIZE_PATCH
+
 	tresize(col, row);
 	wlresize(col, row);
 	ttyresize(win.tw, win.th);
@@ -1047,6 +1086,7 @@ wlresize(int col, int row)
 			WLD_FORMAT_ARGB8888, 0);
 	wld_export(wld.buffer, WLD_WAYLAND_OBJECT_BUFFER, &object);
 	wl.buffer = object.ptr;
+  wl.resized = true;
 }
 
 void
@@ -1365,7 +1405,14 @@ int
 xstartdraw(void)
 {
 	if(IS_SET(MODE_VISIBLE))
+  {
 		wld_set_target_buffer(wld.renderer, wld.buffer);
+    if (wl.resized)
+    {
+      wl.resized = false;
+      wlclear(0, 0, win.w, win.h);
+    }
+  }
 	return IS_SET(MODE_VISIBLE);
 }
 
@@ -1399,7 +1446,11 @@ xdrawline(Line line, int x1, int y, int x2)
 	if (ib > 0)
 		wldraws(buf, base, ox, y, ic, ib);
 
+	#if ANYSIZE_PATCH
+	wl_surface_damage(wl.surface, 0, win.vborderpx + y * win.ch, win.w, win.ch);
+  #else
 	wl_surface_damage(wl.surface, 0, borderpx + y * win.ch, win.w, win.ch);
+  #endif
 }
 
 void
@@ -1422,9 +1473,15 @@ xfinishdraw(void)
 void wltermclear(int col1, int row1, int col2, int row2) {
   uint32_t color = dc.col[IS_SET(MODE_REVERSE) ? defaultfg : defaultbg];
   color = (color & term_alpha << 24) | (color & 0x00FFFFFF);
+	#if ANYSIZE_PATCH
+  wld_fill_rectangle(wld.renderer, color, win.hborderpx + col1 * win.cw,
+                     win.vborderpx + row1 * win.ch, (col2 - col1 + 1) * win.cw,
+                     (row2 - row1 + 1) * win.ch);
+  #else
   wld_fill_rectangle(wld.renderer, color, borderpx + col1 * win.cw,
                      borderpx + row1 * win.ch, (col2 - col1 + 1) * win.cw,
                      (row2 - row1 + 1) * win.ch);
+  #endif
 }
 
 /*
@@ -1446,8 +1503,13 @@ wlclear(int x1, int y1, int x2, int y2)
 void
 wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
 {
+	#if ANYSIZE_PATCH
+	int winx = win.hborderpx + x * win.cw, winy = win.vborderpx + y * win.ch,
+	    width = charlen * win.cw, xp, i;
+	#else
 	int winx = borderpx + x * win.cw, winy = borderpx + y * win.ch,
 	    width = charlen * win.cw, xp, i;
+	#endif // ANYSIZE_PATCH
 	int frcflags, charexists;
 	int u8fl, u8fblen, u8cblen, doesexist;
 	char *u8c, *u8fs;
@@ -1543,9 +1605,23 @@ wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
 		fg = bg;
 
 	/* Intelligent cleaning up of the borders. */
+	#if ANYSIZE_PATCH
+	if (x == 0) {
+		wlclear(0, (y == 0)? 0 : winy, win.hborderpx,
+				((winy + win.ch >= win.vborderpx + win.th)? win.h : 0));
+	}
+	if (winx + width >= win.hborderpx + win.tw) {
+		wlclear(winx + width, (y == 0)? 0 : winy, win.w,
+				((winy + win.ch >= win.vborderpx + win.th)? win.h : (winy + win.ch)));
+	}
+	if (y == 0)
+		wlclear(winx, 0, winx + width, win.vborderpx);
+	if (winy + win.ch >= win.vborderpx + win.th)
+		wlclear(winx, winy + win.ch, winx + width, win.h);
+	#else
 	if (x == 0) {
 		wlclear(0, (y == 0)? 0 : winy, borderpx,
-				((winy + win.ch >= borderpx + win.th)? win.h : (winy + win.ch)));
+				((winy + win.ch >= borderpx + win.th)? win.h : 0));
 	}
 	if (winx + width >= borderpx + win.tw) {
 		wlclear(winx + width, (y == 0)? 0 : winy, win.w,
@@ -1555,7 +1631,7 @@ wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
 		wlclear(winx, 0, winx + width, borderpx);
 	if (winy + win.ch >= borderpx + win.th)
 		wlclear(winx, winy + win.ch, winx + width, win.h);
-
+  #endif
 	/* Clean up the region we want to draw to. */
 	wld_fill_rectangle(wld.renderer, (bg & (term_alpha << 24)) | (bg & 0x00FFFFFF), winx, winy, width, win.ch);
 
@@ -1677,6 +1753,29 @@ wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
 		wld_fill_rectangle(wld.renderer, fg, winx, winy + 2 * font->ascent / 3,
 				width, 1);
 	}
+
+	#if OPENURLONCLICK_PATCH
+	/* underline url (openurlonclick patch) */
+	if (url_draw && y >= url_y1 && y <= url_y2) {
+		int x1 = (y == url_y1) ? url_x1 : 0;
+		int x2 = (y == url_y2) ? MIN(url_x2, term.col-1) : url_maxcol;
+		if (x + charlen > x1 && x <= x2) {
+			int xu = MAX(x, x1);
+			int wu = (x2 - xu + 1) * win.cw;
+			#if ANYSIZE_PATCH
+			xu = win.hborderpx + xu * win.cw;
+			#else
+			xu = borderpx + xu * win.cw;
+			#endif // ANYSIZE_PATCH
+			#if VERTCENTER_PATCH
+			XftDrawRect(xw.draw, fg, xu, winy + win.cyo + dc.font.ascent * chscale + 2, wu, 1);
+			#else
+			XftDrawRect(xw.draw, fg, xu, winy + dc.font.ascent * chscale + 2, wu, 1);
+			#endif // VERTCENTER_PATCH
+			url_draw = (y != url_y2 || x + charlen <= x2);
+		}
+	}
+	#endif // OPENURLONCLICK_PATCH
 }
 
 void
@@ -1722,8 +1821,13 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 	g.mode &= ATTR_BOLD|ATTR_ITALIC|ATTR_UNDERLINE|ATTR_STRUCK|ATTR_WIDE;
 
 	if (ox != cx || oy != cy) {
+	  #if ANYSIZE_PATCH
+		wl_surface_damage(wl.surface, win.hborderpx + ox * win.cw,
+				win.vborderpx + oy * win.ch, win.cw, win.ch);
+    #else
 		wl_surface_damage(wl.surface, borderpx + ox * win.cw,
 				borderpx + oy * win.ch, win.cw, win.ch);
+    #endif
 	}
 
 	if (IS_SET(MODE_REVERSE)) {
@@ -1850,8 +1954,13 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 				#endif // ANYSIZE_PATCH
 				win.cw, 1);
 	}
+	#if ANYSIZE_PATCH
+	wl_surface_damage(wl.surface, win.hborderpx + cx * win.cw,
+			win.vborderpx + cy * win.ch, win.cw, win.ch);
+	#else
 	wl_surface_damage(wl.surface, borderpx + cx * win.cw,
 			borderpx + cy * win.ch, win.cw, win.ch);
+	#endif
 }
 
 void
@@ -1982,6 +2091,7 @@ wlinit(int cols, int rows)
 		die("Can't open display\n");
 
 	wl.needdraw = true;
+  wl.resized = true;
 	registry = wl_display_get_registry(wl.dpy);
 	wl_registry_add_listener(registry, &reglistener, NULL);
 	wld.ctx = wld_wayland_create_context(wl.dpy);
@@ -2019,8 +2129,32 @@ wlinit(int cols, int rows)
 	xloadcols();
 	wlloadcursor();
 
-	win.h = 2 * borderpx + rows * win.ch;
+	/* adjust fixed window geometry */
+	#if ANYGEOMETRY_PATCH
+	switch (geometry) {
+	case CellGeometry:
+		#if ANYSIZE_PATCH
+		win.w = 2 * win.hborderpx + cols * win.cw;
+		win.h = 2 * win.vborderpx + rows * win.ch;
+		#else
+		win.w = 2 * borderpx + cols * win.cw;
+		win.h = 2 * borderpx + rows * win.ch;
+		#endif // ANYGEOMETRY_PATCH | ANYSIZE_PATCH
+		break;
+	case PixelGeometry:
+		win.w = cols;
+		win.h = rows;
+		cols = (win.w - 2 * borderpx) / win.cw;
+		rows = (win.h - 2 * borderpx) / win.ch;
+		break;
+	}
+	#elif ANYSIZE_PATCH
+	win.w = 2 * win.hborderpx + cols * win.cw;
+	win.h = 2 * win.vborderpx + rows * win.ch;
+	#else
 	win.w = 2 * borderpx + cols * win.cw;
+	win.h = 2 * borderpx + rows * win.ch;
+	#endif // ANYGEOMETRY_PATCH | ANYSIZE_PATCH
 
 	wl.surface = wl_compositor_create_surface(wl.cmp);
 	wl_surface_add_listener(wl.surface, &surflistener, NULL);
