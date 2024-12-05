@@ -1,7 +1,13 @@
 # st-wl - simple terminal
 # See LICENSE file for copyright and license details.
 
+ifeq (,$(findstring j,$(MAKEFLAGS)))
+CPUS ?= $(shell nproc)
+MAKEFLAGS += -j $(CPUS)
+endif
 include config.mk
+
+THISDIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 ifdef DEBUG
 DEBUGFLAGS=-O0 -g
@@ -50,38 +56,30 @@ else
     quiet = $(if $2,$2,$($1))
 endif
 
+%.o %.d: %.c | .deps
+	$(call quiet,CC) $(STCFLAGS) -c $< -MMD -MP -MF .deps/$(@:.o=.d) -MT $(basename $@).o
 
-.c.o:
-	$(call quiet,CC) $(STCFLAGS) -c $<
-
-st.o: config.h st.h win.h
-wl.o: arg.h config.h st.h win.h xdg-shell-client-protocol.h xdg-decoration-protocol.h $(LIGATURES_H)
+wl.o: xdg-shell-client-protocol.h xdg-decoration-protocol.h
 
 $(OBJ): config.h config.mk patches.h
 
 # just to make sure that the options rule is run first
-wld/libwld.a config.h config.mk patches.h: options
+$(THISDIR)wld/libwld.a config.h config.mk patches.h: options
 
-st-wl: wld/libwld.a $(OBJ)
+st-wl: $(THISDIR)wld/libwld.a $(OBJ)
 	$(call quiet,CC) $(STCFLAGS) -o $@ $(OBJ) $(STLDFLAGS)
 
-wlddepends:= wayland-private.h surface.c color.c buffer.c interface/context.h interface/buffer.h\
-						 interface/surface.h pixman.h config.mk renderer.c wayland-shm.c wayland.h wld.h context.c\
-						 wld-private.h wayland.c Makefile pixman.c font.c buffered_surface.c renderer.h common.mk
+$(THISDIR)wld/%.o:
+	@rm $@
 
-wld/libwld.a: $(wlddepends:%=wld/%)
+$(THISDIR)wld/libwld.a:
 	@DEBUGFLAGS="$(DEBUGFLAGS)" $(MAKE) -C wld
+
+.deps:
+	@mkdir "$@"
 
 clean:
 	rm -f st-wl $(OBJ) st-wl-$(VERSION).tar.gz xdg-shell-*
-
-dist: clean
-	mkdir -p st-wl-$(VERSION)
-	cp -R FAQ LEGACY TODO LICENSE Makefile README config.mk\
-		config.def.h st-wl.info st-wl.1 arg.h st-wl.h win.h $(LIGATURES_H) $(SRC)\
-		st-wl-$(VERSION)
-	tar -cf - st-wl-$(VERSION) | gzip > st-wl-$(VERSION).tar.gz
-	rm -rf st-wl-$(VERSION)
 
 install: st-wl
 	mkdir -p $(DESTDIR)$(PREFIX)/bin
@@ -101,3 +99,7 @@ uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/st-wl.desktop # desktop-entry patch
 
 .PHONY: all clean dist install uninstall
+
+-include wld/.deps/*.d
+-include .deps/*.d
+
