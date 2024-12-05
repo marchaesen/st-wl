@@ -58,6 +58,7 @@ wl.o: arg.h config.h st.h win.h xdg-shell-client-protocol.h xdg-decoration-proto
 
 $(OBJ): config.h config.mk patches.h
 
+# just to make sure that the options rule is run first
 wld/libwld.a config.h config.mk patches.h: options
 
 st-wl: wld/libwld.a $(OBJ)
