@@ -2077,6 +2077,8 @@ tsetmode(int priv, int set, const int *args, int narg)
 				      and can be mistaken for other control
 				      codes. */
 				break;
+      case 7727: /* Application Escape mode -> not implemented */
+        break;
 			#if SIXEL_PATCH
 			case 80: /* DECSDM -- Sixel Display Mode */
 				MODBIT(term.mode, set, MODE_SIXEL_SDM);
