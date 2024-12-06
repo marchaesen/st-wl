@@ -49,7 +49,7 @@ struct wld_context * wld_wayland_create_context
 
     if (!context)
     {
-        DEBUG("Could not initialize any of the specified implementations\n");
+        DEBUGPRNT("Could not initialize any of the specified implementations\n");
         return NULL;
     }
 

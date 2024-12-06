@@ -37,7 +37,7 @@ struct wld_font_context * wld_font_create_context()
 
     if (FT_Init_FreeType(&context->library) != 0)
     {
-        DEBUG("Failed to initialize FreeType library\n");
+        DEBUGPRNT("Failed to initialize FreeType library\n");
 
         goto error1;
     }
@@ -81,7 +81,7 @@ struct wld_font * wld_font_open_pattern(struct wld_font_context * context,
     {
         FT_Error error;
 
-        DEBUG("Loading font file: %s\n", filename);
+        DEBUGPRNT("Loading font file: %s\n", filename);
 
         error = FT_New_Face(context->library, filename, 0, &font->face);
 
@@ -93,7 +93,7 @@ struct wld_font * wld_font_open_pattern(struct wld_font_context * context,
 
     if (result != FcResultMatch)
     {
-        DEBUG("Couldn't determine font filename or FreeType face\n");
+        DEBUGPRNT("Couldn't determine font filename or FreeType face\n");
         goto error1;
     }
 

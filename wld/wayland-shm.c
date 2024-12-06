@@ -99,7 +99,7 @@ struct wayland_context * wayland_create_context(struct wl_display * display,
 
     if (!(context->registry = wl_display_get_registry(display)))
     {
-        DEBUG("Couldn't get registry\n");
+        DEBUGPRNT("Couldn't get registry\n");
         goto error1;
     }
 
@@ -111,7 +111,7 @@ struct wayland_context * wayland_create_context(struct wl_display * display,
 
     if (!context->wl)
     {
-        DEBUG("No wl_shm global\n");
+        DEBUGPRNT("No wl_shm global\n");
         goto error2;
     }
 

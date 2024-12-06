@@ -34,11 +34,11 @@
 #include FT_BITMAP_H
 
 #define ARRAY_LENGTH(array) (sizeof (array) / sizeof (array)[0])
-#if ENABLE_DEBUG
-#   define DEBUG(format, ...) \
+#ifdef DEBUG
+#   define DEBUGPRNT(format, ...) \
         fprintf(stderr, "# %s: " format, __func__, ## __VA_ARGS__)
 #else
-#   define DEBUG(format, ...)
+#   define DEBUGPRNT(format, ...)
 #endif
 
 #define EXPORT __attribute__((visibility("default")))

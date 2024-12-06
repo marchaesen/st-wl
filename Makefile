@@ -10,7 +10,7 @@ include config.mk
 THISDIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 ifdef DEBUG
-DEBUGFLAGS=-O0 -g
+DEBUGFLAGS=-O0 -g -DDEBUG
 endif
 
 SRC = st.c wl.c xdg-shell-protocol.c xdg-decoration-protocol.c $(LIGATURES_C) # $(SIXEL_C)

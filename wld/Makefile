@@ -3,8 +3,6 @@
 CC = gcc
 CFLAGS = -pipe
 
-ENABLE_DEBUG = 0
-
 THISDIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 PREFIX          ?= /usr/local
@@ -55,9 +53,9 @@ FINAL_CFLAGS += -Werror=implicit-function-declaration -Werror=implicit-int \
                 -Werror=pointer-sign -Werror=pointer-arith \
                 -Wall -Wno-missing-braces
 
-ifeq ($(ENABLE_DEBUG),1)
-    FINAL_CPPFLAGS += -DENABLE_DEBUG=1
-    FINAL_CFLAGS += -g
+ifdef DEBUG
+    FINAL_CPPFLAGS += -DDEBUG
+    FINAL_CFLAGS += -O0 -g
 else
     FINAL_CPPFLAGS += -DNDEBUG
 endif
