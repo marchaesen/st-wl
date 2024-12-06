@@ -287,19 +287,10 @@ static unsigned int width = 564;
 static unsigned int height = 364;
 #endif // ANYGEOMETRY_PATCH
 
-#if THEMED_CURSOR_PATCH
 /*
  * Default shape of the mouse cursor
  */
 static char* mouseshape = "xterm";
-#else
-/*
- * Default colour and shape of the mouse cursor
- */
-static unsigned int mouseshape = XC_xterm;
-static unsigned int mousefg = 7;
-static unsigned int mousebg = 0;
-#endif // THEMED_CURSOR_PATCH
 
 /*
  * Color used to display font attributes when fontconfig selected a font which

@@ -415,13 +415,6 @@
  */
 #define SYNC_PATCH 1
 
-/* Instead of a default X cursor, use the xterm cursor from your cursor theme.
- * You need to uncomment the corresponding line in config.mk to use the -lXcursor library
- * when including this patch.
- * https://st.suckless.org/patches/themed_cursor/
- */
-#define THEMED_CURSOR_PATCH 1
-
 /* Adds support for special underlines.
  *
  * Example test command:

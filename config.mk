@@ -16,9 +16,6 @@ XDG_DECORATION_PROTO = `$(PKG_CONFIG) --variable=pkgdatadir wayland-protocols`/u
 
 PKG_CONFIG = pkg-config
 
-# Uncomment this for the themed cursor patch / THEMED_CURSOR_PATCH
-#XCURSOR = `$(PKG_CONFIG) --libs xcursor`
-
 # Uncomment the lines below for the ligatures patch / LIGATURES_PATCH
 #LIGATURES_C = hb.c
 #LIGATURES_H = hb.h
