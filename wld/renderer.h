@@ -14,6 +14,11 @@ void renderer_draw_text(struct wld_renderer * renderer,
                                int32_t x, int32_t y,
                                const char * text, uint32_t length,
                                struct wld_extents * extents);
+void renderer_composite_image(struct wld_renderer * base,
+                              pixman_image_t *src,
+                              pixman_image_t *mask,
+                              int32_t x, int32_t y,
+                              uint32_t width, uint32_t height);
 void renderer_flush(struct wld_renderer * renderer);
 void renderer_destroy(struct wld_renderer * renderer);
 

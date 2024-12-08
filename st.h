@@ -4,6 +4,9 @@
 #include <time.h>
 #include <sys/types.h>
 #include <fontconfig/fontconfig.h>
+#include <xkbcommon/xkbcommon.h>
+#include <xkbcommon/xkbcommon-compose.h>
+#include <pixman.h>
 #include "patches.h"
 
 /* Arbitrary sizes */
@@ -77,9 +80,9 @@ enum glyph_attribute {
 #if SIXEL_PATCH
 typedef struct _ImageList {
 	struct _ImageList *next, *prev;
-	unsigned char *pixels;
-	void *pixmap;
-	void *clipmask;
+	uint32_t *pixels;
+	pixman_image_t *pixmap;
+	pixman_image_t *clipmask;
 	int width;
 	int height;
 	int x;
@@ -212,6 +215,42 @@ typedef union {
 	const char *s;
 } Arg;
 
+/* Purely graphic info */
+typedef struct {
+	int tw, th; /* tty width and height */
+	int w, h; /* window width and height */
+	#if BACKGROUND_IMAGE_PATCH
+	int x, y; /* window location */
+	#endif // BACKGROUND_IMAGE_PATCH
+	#if ANYSIZE_PATCH
+	int hborderpx, vborderpx;
+	#endif // ANYSIZE_PATCH
+	int ch; /* char height */
+	int cw; /* char width  */
+	#if VERTCENTER_PATCH
+	int cyo; /* char y offset */
+	#endif // VERTCENTER_PATCH
+	int mode; /* window state/mode flags */
+	int cursor; /* cursor style */
+} TermWindow;
+
+/* types used in config.h */
+typedef struct {
+	uint mod;
+	xkb_keysym_t keysym;
+	void (*func)(const Arg *);
+	const Arg arg;
+} Shortcut;
+
+typedef struct {
+	xkb_keysym_t k;
+	uint mask;
+	const char *s;
+	/* three valued logic variables: 0 indifferent, 1 on, -1 off */
+	signed char appkey;    /* application keypad */
+	signed char appcursor; /* application cursor */
+} Key;
+
 /* Font structure */
 #define Font Font_
 typedef struct {
@@ -318,3 +357,7 @@ extern float alpha;
 extern float alphaUnfocused;
 #endif // ALPHA_FOCUS_HIGHLIGHT_PATCH
 #endif // ALPHA_PATCH
+
+extern DC dc;
+extern TermWindow win;
+extern Term term;

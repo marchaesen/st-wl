@@ -13,7 +13,7 @@ ifdef DEBUG
 DEBUGFLAGS=-O0 -g -DDEBUG
 endif
 
-SRC = st.c wl.c xdg-shell-protocol.c xdg-decoration-protocol.c $(LIGATURES_C) # $(SIXEL_C)
+SRC = st.c wl.c xdg-shell-protocol.c xdg-decoration-protocol.c $(SIXEL_C) $(LIGATURES_C)
 OBJ = $(SRC:.c=.o)
 
 all: st-wl

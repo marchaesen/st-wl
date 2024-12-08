@@ -237,6 +237,12 @@ void wld_draw_text(struct wld_renderer * renderer,
                    int32_t x, int32_t y, const char * text, uint32_t length,
                    struct wld_extents * extents);
 
+void wld_composite_image(struct wld_renderer * renderer,
+                         pixman_image_t *src,
+                         pixman_image_t *mask,
+                         int32_t x, int32_t y,
+                         uint32_t width, uint32_t height);
+
 void wld_flush(struct wld_renderer * renderer);
 
 #endif

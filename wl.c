@@ -19,8 +19,6 @@
 #include <wayland-cursor.h>
 #include <wld/wld.h>
 #include <wld/wayland.h>
-#include <xkbcommon/xkbcommon.h>
-#include <xkbcommon/xkbcommon-compose.h>
 #include <wchar.h>
 #include <stdbool.h>
 
@@ -31,24 +29,11 @@ static char *argv0;
 #include "xdg-shell-client-protocol.h"
 #include "xdg-decoration-protocol.h"
 
+#if SIXEL_PATCH
+#include "sixel.h"
+#endif // SIXEL_PATCH
+
 #define DRAW_BUF_SIZ  20*1024
-
-/* types used in config.h */
-typedef struct {
-	uint mod;
-	xkb_keysym_t keysym;
-	void (*func)(const Arg *);
-	const Arg arg;
-} Shortcut;
-
-typedef struct {
-	xkb_keysym_t k;
-	uint mask;
-	const char *s;
-	/* three valued logic variables: 0 indifferent, 1 on, -1 off */
-	signed char appkey;    /* application keypad */
-	signed char appcursor; /* application cursor */
-} Key;
 
 typedef struct {
 	uint mask;
@@ -87,25 +72,6 @@ static void zoomreset(const Arg *);
 
 /* Macros */
 #define IS_SET(flag)		((win.mode & (flag)) != 0)
-
-/* Purely graphic info */
-typedef struct {
-	int tw, th; /* tty width and height */
-	int w, h; /* window width and height */
-	#if BACKGROUND_IMAGE_PATCH
-	int x, y; /* window location */
-	#endif // BACKGROUND_IMAGE_PATCH
-	#if ANYSIZE_PATCH
-	int hborderpx, vborderpx;
-	#endif // ANYSIZE_PATCH
-	int ch; /* char height */
-	int cw; /* char width  */
-	#if VERTCENTER_PATCH
-	int cyo; /* char y offset */
-	#endif // VERTCENTER_PATCH
-	int mode; /* window state/mode flags */
-	int cursor; /* cursor style */
-} TermWindow;
 
 typedef struct {
 	struct xkb_context *ctx;
@@ -252,10 +218,10 @@ static void run(void);
 static void usage(void);
 
 /* Globals */
-static DC dc;
+DC dc;
 static Wayland wl;
 static WlSelection wlsel;
-static TermWindow win;
+TermWindow win;
 static WLD wld;
 static Cursor cursor;
 static Repeat repeat;
@@ -1048,14 +1014,39 @@ zoom(const Arg *arg)
 	Arg larg;
 
 	larg.f = usedfontsize + arg->f;
+	#if SIXEL_PATCH
+	if (larg.f >= 1.0)
+		zoomabs(&larg);
+	#else
 	zoomabs(&larg);
+  #endif
 }
 
 void
 zoomabs(const Arg *arg)
 {
+	#if SIXEL_PATCH
+	int i;
+	ImageList *im;
+	#endif // SIXEL_PATCH
+
 	wlunloadfonts();
 	wlloadfonts(usedfont, arg->f);
+
+  #if SIXEL_PATCH
+	/* delete old pixmaps so that xfinishdraw() can create new scaled ones */
+	for (im = term.images, i = 0; i < 2; i++, im = term.images_alt) {
+		for (; im; im = im->next) {
+			if (im->pixmap)
+				pixman_image_unref(im->pixmap);
+			if (im->clipmask)
+				pixman_image_unref(im->clipmask);
+			im->pixmap = NULL;
+			im->clipmask = NULL;
+		}
+	}
+	#endif // SIXEL_PATCH
+
 	cresize(0, 0);
 	redraw();
 	/* XXX: Should the window size be updated here because wayland doesn't
@@ -1207,6 +1198,19 @@ xloadcols(void)
   term_alpha = (uint8_t)(alpha*255.0);
 	#endif // ALPHA_PATCH
 	loaded = 1;
+}
+
+int
+xgetcolor(int x, unsigned char *r, unsigned char *g, unsigned char *b)
+{
+	if (!BETWEEN(x, 0, dc.collen))
+		return 1;
+
+	*r = (dc.col[x]>>16)&0xff;
+	*g = (dc.col[x]>>8)&0xff;
+	*b = dc.col[x]&0xff;
+
+	return 0;
 }
 
 int
@@ -1456,6 +1460,86 @@ xdrawline(Line line, int x1, int y, int x2)
 void
 xfinishdraw(void)
 {
+	#if SIXEL_PATCH
+	ImageList *im, *next;
+	int width, height;
+	int del, desty, mode, x1, x2, xend;
+	#if ANYSIZE_PATCH
+	int bw = win.hborderpx, bh = win.vborderpx;
+	#else
+	int bw = borderpx, bh = borderpx;
+	#endif // ANYSIZE_PATCH
+	Line line;
+	#endif // SIXEL_PATCH
+
+	#if SIXEL_PATCH
+	for (im = term.images; im; im = next) {
+		next = im->next;
+
+		/* do not draw or process the image, if it is not visible */
+		if (im->x >= term.col || im->y >= term.row || im->y < 0)
+			continue;
+
+		#if KEYBOARDSELECT_PATCH && REFLOW_PATCH
+		/* do not draw the image on the search bar */
+		if (im->y == term.row-1 && IS_SET(MODE_KBDSELECT) && kbds_issearchmode())
+			continue;
+		#endif // KEYBOARDSELECT_PATCH
+
+		/* scale the image */
+		width = MAX(im->width * win.cw / im->cw, 1);
+		height = MAX(im->height * win.ch / im->ch, 1);
+    if (!im->pixmap) {
+      im->pixmap = pixman_image_create_bits_no_clear(
+          PIXMAN_a8r8g8b8, width, height,
+          (uint32_t *)im->pixels, width * sizeof(uint32_t));
+
+      if (!im->pixmap)
+        continue;
+      if (win.cw == im->cw && win.ch == im->ch)
+      {
+        //if (im->transparent)
+        //		im->clipmask = sixel_create_clipmask(im->pixels, width, height);
+			  uint32_t bg = dc.col[defaultfg];
+	      //wld_fill_rectangle(wld.renderer, (bg & (term_alpha << 24)) | (bg & 0x00FFFFFF), bw + im->x * win.cw, bh + im->y * win.ch, width, height);
+        wld_composite_image(wld.renderer, im->pixmap, im->clipmask, bw + im->x * win.cw, bh + im->y * win.ch, width, height);
+      }
+      else
+      {
+        // ????
+        //if (im->transparent)
+        //  im->clipmask = sixel_create_clipmask(im->pixels, width, height);
+        wld_composite_image(wld.renderer, im->pixmap, im->clipmask, bw + im->x * win.cw, bh + im->y * win.ch, width, height);
+      }
+    }
+
+//		/* draw only the parts of the image that are not erased */
+//		#if SCROLLBACK_PATCH || REFLOW_PATCH
+//		line = TLINE(im->y) + im->x;
+//		#else
+//		line = term.line[im->y] + im->x;
+//		#endif // SCROLLBACK_PATCH || REFLOW_PATCH
+//		xend = MIN(im->x + im->cols, term.col);
+//		for (del = 1, x1 = im->x; x1 < xend; x1 = x2) {
+//			mode = line->mode & ATTR_SIXEL;
+//			for (x2 = x1 + 1; x2 < xend; x2++) {
+//				if (((++line)->mode & ATTR_SIXEL) != mode)
+//					break;
+//			}
+//			if (mode) {
+//				XCopyArea(xw.dpy, (Drawable)im->pixmap, xw.buf, gc,
+//				    (x1 - im->x) * win.cw, 0,
+//				    MIN((x2 - x1) * win.cw, width - (x1 - im->x) * win.cw), height,
+//				    bw + x1 * win.cw, desty);
+//				del = 0;
+//			}
+//		}
+		/* if all the parts are erased, we can delete the entire image */
+//		if (del && im->x + im->cols <= term.col)
+//			delete_image(im);
+	}
+	#endif // SIXEL_PATCH
+
 	wl.framecb = wl_surface_frame(wl.surface);
 	wl_callback_add_listener(wl.framecb, &framelistener, NULL);
 	wld_flush(wld.renderer);

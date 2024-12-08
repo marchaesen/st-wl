@@ -364,6 +364,24 @@ void renderer_draw_text(struct wld_renderer * base,
         extents->advance = origin_x;
 }
 
+void renderer_composite_image(struct wld_renderer * base,
+                              pixman_image_t *src,
+                              pixman_image_t *mask,
+                              int32_t x, int32_t y,
+                              uint32_t width, uint32_t height)
+{
+    struct pixman_renderer * renderer = (struct pixman_renderer *)base;
+    pixman_image_composite32(
+        PIXMAN_OP_OVER,
+        src,
+        mask,
+        renderer->target,
+        0, 0,
+        0, 0,
+        x, y,
+        width, height);
+}
+
 void renderer_flush(struct wld_renderer * renderer)
 {
 }

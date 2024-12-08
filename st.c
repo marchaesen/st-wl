@@ -247,7 +247,7 @@ static char base64dec_getc(const char **);
 static ssize_t xwrite(int, const char *, size_t);
 
 /* Globals */
-static Term term;
+Term term;
 static Selection sel;
 static CSIEscape csiescseq;
 static STREscape strescseq;
@@ -2603,7 +2603,6 @@ osc_color_response(int num, int index, int is_osc4)
 	int n;
 	char buf[32];
 	unsigned char r, g, b;
-/* MH!!!
 	if (xgetcolor(is_osc4 ? num : index, &r, &g, &b)) {
 		fprintf(stderr, "erresc: failed to fetch %s color %d\n",
 		        is_osc4 ? "osc4" : "osc",
@@ -2620,7 +2619,6 @@ osc_color_response(int num, int index, int is_osc4)
 	} else {
 		ttywrite(buf, n, 1);
 	}
-*/
 }
 
 void
@@ -3244,7 +3242,7 @@ dcshandle(void)
 		} else {
 			xgetcolor(term.c.attr.bg, &r, &g, &b);
 			if (term.c.attr.bg == defaultbg)
-				a = dc.col[defaultbg].pixel >> 24 & 255;
+				a = dc.col[defaultbg] >> 24 & 255;
 		}
 		bgcolor = a << 24 | r << 16 | g << 8 | b;
 		if (sixel_parser_init(&sixel_st, transparent, (255 << 24), bgcolor, 1, win.cw, win.ch) != 0)

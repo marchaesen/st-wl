@@ -78,6 +78,15 @@ void wld_draw_text(struct wld_renderer * renderer,
                               extents);
 }
 
+void wld_composite_image(struct wld_renderer * renderer,
+                         pixman_image_t *src,
+                         pixman_image_t *mask,
+                         int32_t x, int32_t y,
+                         uint32_t width, uint32_t height)
+{
+  renderer_composite_image(renderer, src, mask, x, y, width, height);
+}
+
 EXPORT
 void wld_flush(struct wld_renderer * renderer)
 {
