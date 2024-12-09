@@ -5,7 +5,7 @@
  *
  * font: see http://freedesktop.org/software/fontconfig/fontconfig-user.html
  */
-static char *font = "MesloLGS NF:pixelsize=15:antialias=true:autohint=true";
+static char *font = "MesloLGS NF:pixelsize=13:antialias=true:autohint=true";
 #if FONT2_PATCH
 /* Spare fonts */
 static char *font2[] = {
