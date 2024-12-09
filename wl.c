@@ -1670,9 +1670,20 @@ wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
 	}
 
 	if (base.mode & ATTR_REVERSE) {
+		#if SPOILER_PATCH
+		if (bg == fg) {
+			bg = dc.col[defaultfg];
+			fg = dc.col[defaultbg];
+		} else {
+			temp = fg;
+			fg = bg;
+			bg = temp;
+		}
+		#else
 		temp = fg;
 		fg = bg;
 		bg = temp;
+		#endif // SPOILER_PATCH
 	}
 
 	if (base.mode & ATTR_FAINT && !(base.mode & ATTR_BOLD)) {
