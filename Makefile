@@ -89,14 +89,14 @@ install: st-wl
 	sed "s/VERSION/$(VERSION)/g" < st-wl.1 > $(DESTDIR)$(MANPREFIX)/man1/st-wl.1
 	chmod 644 $(DESTDIR)$(MANPREFIX)/man1/st-wl.1
 	tic -sx st-wl.info
-	mkdir -p $(DESTDIR)$(PREFIX)/share/applications # desktop-entry patch
-	cp st-wl.desktop $(DESTDIR)$(PREFIX)/share/applications # desktop-entry patch
+	mkdir -p $(DESTDIR)$(PREFIX)/share/applications
+	cp st-wl.desktop $(DESTDIR)$(PREFIX)/share/applications
 	@echo Please see the README file regarding the terminfo entry of st-wl.
 
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/st-wl
 	rm -f $(DESTDIR)$(MANPREFIX)/man1/st-wl.1
-	rm -f $(DESTDIR)$(PREFIX)/share/applications/st-wl.desktop # desktop-entry patch
+	rm -f $(DESTDIR)$(PREFIX)/share/applications/st-wl.desktop
 
 .PHONY: all clean dist install uninstall
 
