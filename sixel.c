@@ -245,7 +245,7 @@ sixel_parser_init(sixel_state_t *st,
 	st->param = 0;
 
 	/* buffer initialization */
-	status = sixel_image_init(&st->image, 1, 1, fgcolor, transparent ? 0 : bgcolor, use_private_register);
+	status = sixel_image_init(&st->image, 1, 1, fgcolor, 0, use_private_register);
 
 	return status;
 }
@@ -327,8 +327,14 @@ sixel_parser_finalize(sixel_state_t *st, ImageList **newimages, int cx, int cy, 
 		for (trans = 0, j = 0; j < im->height && y < h; j++, y++) {
 			src = st->image.data + image->width * y;
 			for (x = 0; x < w; x++) {
-				color = st->image.palette[*src++];
-				trans |= (color == 0);
+				color = st->image.palette[*src];
+        if ((color&0xffffff) == 0)
+        {
+          trans=1;
+          color=0;
+          st->image.palette[*src]=color;
+        }
+        src++;
 				*dst++ = color;
 			}
 		}
