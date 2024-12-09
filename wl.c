@@ -1434,7 +1434,11 @@ xdrawline(Line line, int x1, int y, int x2)
 		if (new.mode == ATTR_WDUMMY)
 			continue;
 		if (selected(x, y))
+			#if SELECTION_COLORS_PATCH
+			new.mode |= ATTR_SELECTED;
+      #else
 			new.mode ^= ATTR_REVERSE;
+      #endif // SELECTION_COLORS_PATCH
 		if (ib > 0 && (ATTRCMP(base, new) || ib >= DRAW_BUF_SIZ-UTF_SIZ)) {
 			wldraws(buf, base, ox, y, ic, ib);
 			ic = ib = 0;
@@ -1626,16 +1630,36 @@ wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
 		frcflags = FRC_BOLD;
 	}
 
-	if (IS_TRUECOL(base.fg)) {
-		fg = base.fg | 0xff000000;
+	if (IS_TRUECOL(dc.col[base.fg])) {
+	  #if SELECTION_COLORS_PATCH
+	  if ((base.mode & ATTR_SELECTED))
+			fg = dc.col[selectionfg] | 0xff000000;
+    else
+    #endif // SELECTION_COLORS_PATCH
+		  fg = dc.col[base.fg] | 0xff000000;
 	} else {
-		fg = dc.col[base.fg];
+	  #if SELECTION_COLORS_PATCH
+	  if ((base.mode & ATTR_SELECTED))
+			fg = dc.col[selectionfg];
+    else
+    #endif // SELECTION_COLORS_PATCH
+		  fg = dc.col[base.fg];
 	}
 
-	if (IS_TRUECOL(base.bg)) {
-		bg = base.bg | 0xff000000;
+	if (IS_TRUECOL(dc.col[base.bg])) {
+	  #if SELECTION_COLORS_PATCH
+	  if (base.mode & ATTR_SELECTED)
+		  bg = dc.col[selectionbg] | 0xff000000;
+    else
+    #endif // SELECTION_COLORS_PATCH
+		  bg = dc.col[base.bg] | 0xff000000;
 	} else {
-		bg = dc.col[base.bg];
+	  #if SELECTION_COLORS_PATCH
+	  if (base.mode & ATTR_SELECTED)
+		  bg = dc.col[selectionbg];
+    else
+    #endif // SELECTION_COLORS_PATCH
+		  bg = dc.col[base.bg];
 	}
 
 	if (base.mode & ATTR_BOLD) {
@@ -1643,8 +1667,13 @@ wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
 		 * change basic system colors [0-7]
 		 * to bright system colors [8-15]
 		 */
+	  #if SELECTION_COLORS_PATCH
+		if (BETWEEN(selectionfg, 0, 7) && !(base.mode & ATTR_FAINT))
+			fg = dc.col[selectionfg + 8];
+    #else
 		if (BETWEEN(base.fg, 0, 7) && !(base.mode & ATTR_FAINT))
 			fg = dc.col[base.fg + 8];
+    #endif // SELECTION_COLORS_PATCH
 
 		if (base.mode & ATTR_ITALIC) {
 			font = &dc.ibfont;
@@ -1902,9 +1931,16 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 {
 	uint32_t drawcol;
 
+	#if !DYNAMIC_CURSOR_COLOR_PATCH
 	/* remove the old cursor */
 	if (selected(ox, oy))
+		#if SELECTION_COLORS_PATCH
+		og.mode |= ATTR_SELECTED;
+		#else
 		og.mode ^= ATTR_REVERSE;
+		#endif // SELECTION_COLORS_PATCH
+	#endif // DYNAMIC_CURSOR_COLOR_PATCH
+
 	wldrawglyph(og, ox, oy);
 
 	if (IS_SET(MODE_HIDE))
@@ -1928,6 +1964,10 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 	if (IS_SET(MODE_REVERSE)) {
 		g.mode |= ATTR_REVERSE;
 		g.bg = defaultfg;
+		#if SELECTION_COLORS_PATCH
+		g.fg = defaultcs;
+		drawcol = dc.col[defaultrcs];
+		#else
 		if (selected(cx, cy)) {
 			drawcol = dc.col[defaultcs];
 			g.fg = defaultrcs;
@@ -1935,7 +1975,13 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 			drawcol = dc.col[defaultrcs];
 			g.fg = defaultcs;
 		}
+		#endif // SELECTION_COLORS_PATCH
 	} else {
+		#if SELECTION_COLORS_PATCH
+		g.fg = defaultbg;
+		g.bg = defaultcs;
+		drawcol = dc.col[defaultcs];
+    #else
 		if (selected(cx, cy)) {
 			g.fg = defaultfg;
 			g.bg = defaultrcs;
@@ -1944,6 +1990,7 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 			g.bg = defaultcs;
 		}
 		drawcol = dc.col[g.bg];
+    #endif // SELECTION_COLORS_PATCH
 	}
 
 	/* draw the new one */
