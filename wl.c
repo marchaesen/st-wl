@@ -1630,13 +1630,13 @@ wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
 		frcflags = FRC_BOLD;
 	}
 
-	if (IS_TRUECOL(dc.col[base.fg])) {
+	if (IS_TRUECOL(base.fg)) {
 	  #if SELECTION_COLORS_PATCH
 	  if ((base.mode & ATTR_SELECTED))
 			fg = dc.col[selectionfg] | 0xff000000;
     else
     #endif // SELECTION_COLORS_PATCH
-		  fg = dc.col[base.fg] | 0xff000000;
+		  fg = base.fg | 0xff000000;
 	} else {
 	  #if SELECTION_COLORS_PATCH
 	  if ((base.mode & ATTR_SELECTED))
@@ -1646,13 +1646,13 @@ wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
 		  fg = dc.col[base.fg];
 	}
 
-	if (IS_TRUECOL(dc.col[base.bg])) {
+	if (IS_TRUECOL(base.bg)) {
 	  #if SELECTION_COLORS_PATCH
 	  if (base.mode & ATTR_SELECTED)
 		  bg = dc.col[selectionbg] | 0xff000000;
     else
     #endif // SELECTION_COLORS_PATCH
-		  bg = dc.col[base.bg] | 0xff000000;
+		  bg = base.bg | 0xff000000;
 	} else {
 	  #if SELECTION_COLORS_PATCH
 	  if (base.mode & ATTR_SELECTED)
