@@ -365,7 +365,6 @@ static Shortcut shortcuts[] = {
 	#endif // ALPHA_PATCH
 	#if FULLSCREEN_PATCH
 	{ MOD_MASK_NONE,            XKB_KEY_F11,         fullscreen,      {.i =  0} },
-	{ MODKEY,               XKB_KEY_Return,      fullscreen,      {.i =  0} },
 	#endif // FULLSCREEN_PATCH
 	#if SCROLLBACK_PATCH
 	{ MOD_MASK_SHIFT,            XKB_KEY_Page_Up,     kscrollup,       {.i = -1}, S_PRI },

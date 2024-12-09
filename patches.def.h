@@ -191,7 +191,7 @@
  * which matches the default xterm behavior.
  * https://st.suckless.org/patches/fullscreen/
  */
-#define FULLSCREEN_PATCH 0
+#define FULLSCREEN_PATCH 1
 
 /* Hide the X cursor whenever a key is pressed and show it back when the mouse is moved in
  * the terminal window.

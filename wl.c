@@ -1117,10 +1117,25 @@ xdgsurfconfigure(void *data, struct xdg_surface *surf, uint32_t serial)
 	xdg_surface_ack_configure(surf, serial);
 }
 
+extern bool g_fullscreen_state;
 void
 xdgtoplevelconfigure(void *data, struct xdg_toplevel *toplevel,
 		int32_t w, int32_t h, struct wl_array *states)
 {
+  g_fullscreen_state = false;
+  if (states)
+  {
+    uint32_t *state = states->data;
+    for (int i = 0; i < states->size/4; i++)
+    {
+      if (state[i] == XDG_TOPLEVEL_STATE_FULLSCREEN)
+      {
+        g_fullscreen_state = true;
+        break;
+      }
+    }
+  }
+
 	if (w == win.w && h == win.h)
 		return;
 
