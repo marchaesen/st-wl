@@ -22,7 +22,7 @@
 #include <wchar.h>
 #include <stdbool.h>
 
-static char *argv0;
+char *argv0;
 #include "arg.h"
 #include "st.h"
 #include "win.h"
