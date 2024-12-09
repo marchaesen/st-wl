@@ -1964,7 +1964,17 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 	/*
 	 * Select the right color for the right mode.
 	 */
-	g.mode &= ATTR_BOLD|ATTR_ITALIC|ATTR_UNDERLINE|ATTR_STRUCK|ATTR_WIDE;
+	g.mode &= ATTR_BOLD|ATTR_ITALIC|ATTR_UNDERLINE|ATTR_STRUCK|ATTR_WIDE
+	#if BOXDRAW_PATCH
+	|ATTR_BOXDRAW
+	#endif // BOXDRAW_PATCH
+	#if DYNAMIC_CURSOR_COLOR_PATCH
+	|ATTR_REVERSE
+	#endif // DYNAMIC_CURSOR_COLOR_PATCH
+	#if KEYBOARDSELECT_PATCH && REFLOW_PATCH
+	|ATTR_HIGHLIGHT
+	#endif // KEYBOARDSELECT_PATCH
+	;
 
 	if (ox != cx || oy != cy) {
 	  #if ANYSIZE_PATCH
@@ -1993,20 +2003,49 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 		#endif // SELECTION_COLORS_PATCH
 	} else {
 		#if SELECTION_COLORS_PATCH
+		#if DYNAMIC_CURSOR_COLOR_PATCH
+		unsigned int tmpcol = g.bg;
+		g.bg = g.fg;
+		g.fg = tmpcol;
+		#else
 		g.fg = defaultbg;
 		g.bg = defaultcs;
+		#endif // DYNAMIC_CURSOR_COLOR_PATCH
 		drawcol = dc.col[defaultcs];
     #else
 		if (selected(cx, cy)) {
+			#if KEYBOARDSELECT_PATCH && REFLOW_PATCH
+			g.mode &= ~(ATTR_REVERSE | ATTR_HIGHLIGHT);
+			#elif DYNAMIC_CURSOR_COLOR_PATCH
+			g.mode &= ~ATTR_REVERSE;
+			#endif // DYNAMIC_CURSOR_COLOR_PATCH
 			g.fg = defaultfg;
 			g.bg = defaultrcs;
 		} else {
+			#if DYNAMIC_CURSOR_COLOR_PATCH
+			unsigned int tmpcol = g.bg;
+			g.bg = g.fg;
+			g.fg = tmpcol;
+			#else
 			g.fg = defaultbg;
 			g.bg = defaultcs;
+			#endif // DYNAMIC_CURSOR_COLOR_PATCH
 		}
+		#if DYNAMIC_CURSOR_COLOR_PATCH
+		if (IS_TRUECOL(g.bg))
+			drawcol = g.bg;
+		else
+			drawcol = dc.col[g.bg];
+		#else
 		drawcol = dc.col[g.bg];
+		#endif // DYNAMIC_CURSOR_COLOR_PATCH
     #endif // SELECTION_COLORS_PATCH
 	}
+
+	#if KEYBOARDSELECT_PATCH && REFLOW_PATCH
+	if (g.mode & ATTR_HIGHLIGHT)
+		g.mode ^= ATTR_REVERSE;
+	#endif // KEYBOARDSELECT_PATCH
 
 	/* draw the new one */
 	if (IS_SET(MODE_FOCUSED)) {
