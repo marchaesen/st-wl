@@ -115,10 +115,12 @@ struct wayland_context * wayland_create_context(struct wl_display * display,
         goto error2;
     }
 
-    wl_shm_add_listener(context->wl, &shm_listener, context);
-
     /* Wait for SHM formats. */
-    wl_display_roundtrip_queue(display, queue);
+    while (!context->formats.size)
+    {
+        DEBUGPRNT("No wl_shm formats\n");
+        wl_display_roundtrip_queue(display, queue);
+    }
 
     return &context->base;
 
@@ -265,7 +267,10 @@ void registry_global(void * data, struct wl_registry * registry, uint32_t name,
     struct shm_context * context = data;
 
     if (strcmp(interface, "wl_shm") == 0)
+    {
         context->wl = wl_registry_bind(registry, name, &wl_shm_interface, 1);
+        wl_shm_add_listener(context->wl, &shm_listener, context);
+    }
 }
 
 void registry_global_remove(void * data, struct wl_registry * registry,
