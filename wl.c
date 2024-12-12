@@ -1479,98 +1479,63 @@ xdrawline(Line line, int x1, int y, int x2)
 void
 xfinishdraw(void)
 {
-	#if SIXEL_PATCH
-	ImageList *im, *next;
-	int width, height;
-	int del, desty, mode, x1, x2, xend;
-	#if ANYSIZE_PATCH
-	int bw = win.hborderpx, bh = win.vborderpx;
-	#else
-	int bw = borderpx, bh = borderpx;
-	#endif // ANYSIZE_PATCH
-	Line line;
-	#endif // SIXEL_PATCH
+#if SIXEL_PATCH
+  ImageList *im, *next;
+  int width, height;
+  int del, desty, mode, x1, x2, xend;
+#if ANYSIZE_PATCH
+  int bw = win.hborderpx, bh = win.vborderpx;
+#else
+  int bw = borderpx, bh = borderpx;
+#endif // ANYSIZE_PATCH
+  Line line;
+#endif // SIXEL_PATCH
 
-	#if SIXEL_PATCH
-	for (im = term.images; im; im = next) {
-		next = im->next;
+#if SIXEL_PATCH
+  for (im = term.images; im; im = next) {
+    next = im->next;
 
-		/* do not draw or process the image, if it is not visible */
-		if (im->x >= term.col || im->y >= term.row || im->y < 0)
-			continue;
+    /* do not draw or process the image, if it is not visible */
+    if (im->x >= term.col || im->y >= term.row || im->y < 0)
+      continue;
 
-		#if KEYBOARDSELECT_PATCH && REFLOW_PATCH
-		/* do not draw the image on the search bar */
-		if (im->y == term.row-1 && IS_SET(MODE_KBDSELECT) && kbds_issearchmode())
-			continue;
-		#endif // KEYBOARDSELECT_PATCH
+#if KEYBOARDSELECT_PATCH && REFLOW_PATCH
+    /* do not draw the image on the search bar */
+    if (im->y == term.row-1 && IS_SET(MODE_KBDSELECT) && kbds_issearchmode())
+      continue;
+#endif // KEYBOARDSELECT_PATCH
 
-		/* scale the image */
-		width = MAX(im->width * win.cw / im->cw, 1);
-		height = MAX(im->height * win.ch / im->ch, 1);
+    /* scale the image */
+    width = MAX(im->width * win.cw / im->cw, 1);
+    height = MAX(im->height * win.ch / im->ch, 1);
     if (!im->pixmap) {
       im->pixmap = pixman_image_create_bits_no_clear(
           PIXMAN_a8r8g8b8, width, height,
           (uint32_t *)im->pixels, width * sizeof(uint32_t));
-
-      if (!im->pixmap)
-        continue;
-      if (win.cw == im->cw && win.ch == im->ch)
-      {
-        //if (im->transparent)
-        //		im->clipmask = sixel_create_clipmask(im->pixels, width, height);
-			  uint32_t bg = dc.col[defaultfg];
-	      //wld_fill_rectangle(wld.renderer, (bg & (term_alpha << 24)) | (bg & 0x00FFFFFF), bw + im->x * win.cw, bh + im->y * win.ch, width, height);
-        wld_composite_image(wld.renderer, im->pixmap, im->clipmask, bw + im->x * win.cw, bh + im->y * win.ch, width, height);
-      }
-      else
-      {
-        // ????
-        //if (im->transparent)
-        //  im->clipmask = sixel_create_clipmask(im->pixels, width, height);
-        wld_composite_image(wld.renderer, im->pixmap, im->clipmask, bw + im->x * win.cw, bh + im->y * win.ch, width, height);
-      }
     }
 
-//		/* draw only the parts of the image that are not erased */
-//		#if SCROLLBACK_PATCH || REFLOW_PATCH
-//		line = TLINE(im->y) + im->x;
-//		#else
-//		line = term.line[im->y] + im->x;
-//		#endif // SCROLLBACK_PATCH || REFLOW_PATCH
-//		xend = MIN(im->x + im->cols, term.col);
-//		for (del = 1, x1 = im->x; x1 < xend; x1 = x2) {
-//			mode = line->mode & ATTR_SIXEL;
-//			for (x2 = x1 + 1; x2 < xend; x2++) {
-//				if (((++line)->mode & ATTR_SIXEL) != mode)
-//					break;
-//			}
-//			if (mode) {
-//				XCopyArea(xw.dpy, (Drawable)im->pixmap, xw.buf, gc,
-//				    (x1 - im->x) * win.cw, 0,
-//				    MIN((x2 - x1) * win.cw, width - (x1 - im->x) * win.cw), height,
-//				    bw + x1 * win.cw, desty);
-//				del = 0;
-//			}
-//		}
-		/* if all the parts are erased, we can delete the entire image */
-//		if (del && im->x + im->cols <= term.col)
-//			delete_image(im);
-	}
-	#endif // SIXEL_PATCH
+    if (!im->pixmap)
+      continue;
+    //if (im->transparent)
+    //		im->clipmask = sixel_create_clipmask(im->pixels, width, height);
+    uint32_t bg = dc.col[defaultfg];
+    //wld_fill_rectangle(wld.renderer, (bg & (term_alpha << 24)) | (bg & 0x00FFFFFF), bw + im->x * win.cw, bh + im->y * win.ch, width, height);
+    wld_composite_image(wld.renderer, im->pixmap, im->clipmask, bw + im->x * win.cw, bh + im->y * win.ch, width, height);
+  }
+#endif // SIXEL_PATCH
 
-	wl.framecb = wl_surface_frame(wl.surface);
-	wl_callback_add_listener(wl.framecb, &framelistener, NULL);
-	wld_flush(wld.renderer);
-	wl_surface_attach(wl.surface, wl.buffer, 0, 0);
-	wl_surface_commit(wl.surface);
-	/* need to wait to destroy the old buffer until we commit the new
-	 * buffer */
-	if (wld.oldbuffer) {
-		wld_buffer_unreference(wld.oldbuffer);
-		wld.oldbuffer = 0;
-	}
-	wl.needdraw = false;
+  wl.framecb = wl_surface_frame(wl.surface);
+  wl_callback_add_listener(wl.framecb, &framelistener, NULL);
+  wld_flush(wld.renderer);
+  wl_surface_attach(wl.surface, wl.buffer, 0, 0);
+  wl_surface_commit(wl.surface);
+  /* need to wait to destroy the old buffer until we commit the new
+   * buffer */
+  if (wld.oldbuffer) {
+    wld_buffer_unreference(wld.oldbuffer);
+    wld.oldbuffer = 0;
+  }
+  wl.needdraw = false;
 }
 
 void wltermclear(int col1, int row1, int col2, int row2) {

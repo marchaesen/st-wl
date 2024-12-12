@@ -67,6 +67,17 @@ void wld_copy_region(struct wld_renderer * renderer,
 }
 
 EXPORT
+void wld_copy_rectangle(struct wld_renderer * renderer,
+                        pixman_image_t * src,
+                        int32_t dst_x, int32_t dst_y,
+                        int32_t src_x, int32_t src_y,
+                        uint32_t width, uint32_t height)
+{
+    renderer_copy_rectangle(renderer, src,
+                            dst_x, dst_y, src_x, src_y, width, height);
+}
+
+EXPORT
 void wld_draw_text(struct wld_renderer * renderer,
                    struct wld_font * font_base, uint32_t color,
                    int32_t x, int32_t y, const char * text, uint32_t length,

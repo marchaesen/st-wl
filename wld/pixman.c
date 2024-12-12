@@ -241,6 +241,20 @@ void renderer_fill_region(struct wld_renderer * base, uint32_t color,
                             &pixman_color, num_boxes, boxes);
 }
 
+void renderer_copy_rectangle(struct wld_renderer * base, pixman_image_t * src,
+                             int32_t dst_x, int32_t dst_y,
+                             int32_t src_x, int32_t src_y,
+                             uint32_t width, uint32_t height)
+{
+    struct pixman_renderer * renderer = (struct pixman_renderer *)base;
+    pixman_image_t *dst = renderer->target;
+
+    if (!src) return;
+
+    pixman_image_composite32(PIXMAN_OP_SRC, src, NULL, dst,
+                             src_x, src_y, 0, 0, dst_x, dst_y, width, height);
+}
+
 void renderer_copy_region(struct wld_renderer * base, struct buffer * buffer,
                           int32_t dst_x, int32_t dst_y,
                           pixman_region32_t * region)
