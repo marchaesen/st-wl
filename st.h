@@ -14,6 +14,13 @@
 #define ESC_BUF_SIZ   (128*UTF_SIZ)
 
 /* macros */
+#ifdef DEBUG
+#   define DEBUGPRNT(format, ...) \
+        fprintf(stderr, "# %s: " format, __func__, ## __VA_ARGS__)
+#else
+#   define DEBUGPRNT(format, ...)
+#endif
+
 #define MIN(a, b)		((a) < (b) ? (a) : (b))
 #define MAX(a, b)		((a) < (b) ? (b) : (a))
 #define LEN(a)			(sizeof(a) / sizeof(a)[0])

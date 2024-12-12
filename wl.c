@@ -2269,7 +2269,7 @@ wlinit(int cols, int rows)
 	if (!wl.wm)
 		die("Display has no window manager\n");
 	if (!wl.decoration_manager)
-		die("Display has no decoration manager\n");
+		DEBUGPRNT("# Display has no decoration manager\n");
 
 	wl.keyboard = wl_seat_get_keyboard(wl.seat);
 	wl_keyboard_add_listener(wl.keyboard, &kbdlistener, NULL);
@@ -2327,8 +2327,11 @@ wlinit(int cols, int rows)
 	xdg_toplevel_set_app_id(wl.xdgtoplevel, opt_class ? opt_class : termclass);
 
 #if !NO_WINDOW_DECORATIONS_PATCH
-  struct zxdg_toplevel_decoration_v1 *decoration = zxdg_decoration_manager_v1_get_toplevel_decoration(wl.decoration_manager, wl.xdgtoplevel);
-  zxdg_toplevel_decoration_v1_set_mode(decoration, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+  if (wl.decoration_manager)
+  {
+    struct zxdg_toplevel_decoration_v1 *decoration = zxdg_decoration_manager_v1_get_toplevel_decoration(wl.decoration_manager, wl.xdgtoplevel);
+    zxdg_toplevel_decoration_v1_set_mode(decoration, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+  }
 #endif
 
 	wl_surface_commit(wl.surface);
