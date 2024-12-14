@@ -1564,11 +1564,32 @@ xfinishdraw(void)
 
     if (!im->pixmap)
       continue;
-    //if (im->transparent)
-    //		im->clipmask = sixel_create_clipmask(im->pixels, width, height);
-    uint32_t bg = dc.col[defaultfg];
-    //wld_fill_rectangle(wld.renderer, (bg & (term_alpha << 24)) | (bg & 0x00FFFFFF), bw + im->x * win.cw, bh + im->y * win.ch, width, height);
-    wld_composite_image(wld.renderer, im->pixmap, im->clipmask, bw + im->x * win.cw, bh + im->y * win.ch, width, height);
+
+		/* draw only the parts of the image that are not erased */
+		#if SCROLLBACK_PATCH || REFLOW_PATCH
+		line = TLINE(im->y) + im->x;
+		#else
+		line = term.line[im->y] + im->x;
+		#endif // SCROLLBACK_PATCH || REFLOW_PATCH
+		xend = MIN(im->x + im->cols, term.col);
+		for (del = 1, x1 = im->x; x1 < xend; x1 = x2) {
+			mode = line->mode & ATTR_SIXEL;
+			for (x2 = x1 + 1; x2 < xend; x2++) {
+				if (((++line)->mode & ATTR_SIXEL) != mode)
+					break;
+			}
+			if (mode) {
+        wld_composite_image(wld.renderer, im->pixmap, NULL,
+                           bw + x1 * win.cw, bh + im->y * win.ch,
+                           (x1 - im->x) * win.cw, 0,
+				                   MIN((x2 - x1) * win.cw, width - (x1 - im->x) * win.cw), height
+                           );
+				del = 0;
+			}
+		}
+		/* if all the parts are erased, we can delete the entire image */
+		if (del && im->x + im->cols <= term.col)
+			delete_image(im);
   }
 #endif // SIXEL_PATCH
 
