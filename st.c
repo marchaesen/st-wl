@@ -2563,6 +2563,26 @@ csihandle(void)
 			goto unknown;
 		}
 		break;
+  case '>':
+		switch (csiescseq.mode[1]) {
+      case 'q': // XTVERION
+			    n = snprintf(buffer, sizeof buffer, "\x1bP>|st-wl(0.9.2)\x1b\\");
+			    ttywrite(buffer, n, 1);
+        break;
+      case 'c': // Secondary DA (DA2)
+        /*
+         * >=96: vim sets ttymouse=xterm2
+         * >=141: vim uses tcap-query.
+         * >=277: vim uses sgr mouse tracking.
+         * >=279: xterm supports DECSLRM/DECLRMM.
+         */
+			    n = snprintf(buffer, sizeof buffer, "\x1b[>24;279;0c");
+			    ttywrite(buffer, n, 1);
+        break;
+      default:
+        goto unknown;
+    }
+    break;
 	}
 }
 
@@ -3218,7 +3238,7 @@ dcshandle(void)
 	switch (csiescseq.mode[0]) {
 	default:
 	unknown:
-		fprintf(stderr, "erresc: unknown csi ");
+		fprintf(stderr, "erresc: unknown dcs ");
 		csidump();
 		/* die(""); */
 		break;
