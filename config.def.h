@@ -101,8 +101,8 @@ int allowwindowops = 1;
  * near minlatency, but it waits longer for slow updates to avoid partial draw.
  * low minlatency will tear/flicker more, as it can "detect" idle too early.
  */
-static double minlatency = 2;
-static double maxlatency = 33;
+static double minlatency = 20;
+static double maxlatency = 60;
 
 #if SYNC_PATCH
 /*

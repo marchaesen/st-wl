@@ -2353,8 +2353,9 @@ run(void)
 	fd_set rfd;
 	int wlfd = wl_display_get_fd(wl.dpy), blinkset = 0;
 	int ttyfd;
-	struct timespec drawtimeout, *tv = NULL, now, last, lastblink;
-	ulong msecs;
+  int drawing;
+	struct timespec drawtimeout, *tv = NULL, now, lastblink, trigger;
+	long timeout;
 
 	/* Look for initial configure. */
 	wl_display_roundtrip(wl.dpy);
@@ -2364,13 +2365,26 @@ run(void)
 	if (!(IS_SET(MODE_VISIBLE)))
 		win.mode |= MODE_VISIBLE;
 
-	clock_gettime(CLOCK_MONOTONIC, &last);
-	lastblink = last;
+	clock_gettime(CLOCK_MONOTONIC, &lastblink);
 
-	for (;;) {
+	for (drawing=0, timeout=0;;) {
 		FD_ZERO(&rfd);
 		FD_SET(ttyfd, &rfd);
 		FD_SET(wlfd, &rfd);
+
+		#if SYNC_PATCH
+    if (ttyread_pending())
+      timeout=0;
+    #endif
+
+    if (timeout>=0)
+    {
+      drawtimeout.tv_nsec = 1E6 * timeout;
+      drawtimeout.tv_sec = 0;
+      tv = &drawtimeout;
+    }
+    else
+      tv = NULL;
 
 		if (pselect(MAX(wlfd, ttyfd)+1, &rfd, NULL, NULL, tv, NULL) < 0) {
 			if (errno == EINTR)
@@ -2378,37 +2392,90 @@ run(void)
 			die("select failed: %s\n", strerror(errno));
 		}
 
-		if (FD_ISSET(ttyfd, &rfd)) {
+		#if SYNC_PATCH
+		int ttyin = FD_ISSET(ttyfd, &rfd) || ttyread_pending();
+		if (ttyin)
+    #else
+		if (FD_ISSET(ttyfd, &rfd))
+    #endif
+    {
 			ttyread();
-			if (blinktimeout) {
-				blinkset = tattrset(ATTR_BLINK);
-				if (!blinkset)
-					MODBIT(win.mode, 0, MODE_BLINK);
-			}
 		}
 
-		if (FD_ISSET(wlfd, &rfd)) {
-			if (wl_display_dispatch(wl.dpy) == -1)
-				die("Connection error\n");
-		}
+  	int xev = 0;
+    if (FD_ISSET(wlfd, &rfd))
+      wl_display_dispatch(wl.dpy);
 
 		clock_gettime(CLOCK_MONOTONIC, &now);
-		msecs = -1;
+
+		/*
+		 * To reduce flicker and tearing, when new content or event
+		 * triggers drawing, we first wait a bit to ensure we got
+		 * everything, and if nothing new arrives - we draw.
+		 * We start with trying to wait minlatency ms. If more content
+		 * arrives sooner, we retry with shorter and shorter periods,
+		 * and eventually draw even without idle after maxlatency ms.
+		 * Typically this results in low latency while interacting,
+		 * maximum latency intervals during `cat huge.txt`, and perfect
+		 * sync with periodic updates from animations/key-repeats/etc.
+		 */
+		#if SYNC_PATCH
+		if (ttyin || xev>0)
+		#else
+		if (FD_ISSET(ttyfd, &rfd))
+		#endif // SYNC_PATCH
+		{
+			if (!drawing) {
+				trigger = now;
+				#if BLINKING_CURSOR_PATCH
+				if (IS_SET(MODE_BLINK)) {
+					win.mode ^= MODE_BLINK;
+				}
+				lastblink = now;
+				#endif // BLINKING_CURSOR_PATCH
+        drawing=1;
+      }
+			timeout = (maxlatency - TIMEDIFF(now, trigger)) \
+			          / maxlatency * minlatency;
+			if (timeout > 0)
+      {
+				continue;  /* we have time, try to find idle */
+      }
+		}
+
+		#if SYNC_PATCH
+		if (tinsync(su_timeout)) {
+			/*
+			 * on synchronized-update draw-suspension: don't reset
+			 * drawing so that we draw ASAP once we can (just after
+			 * ESU). it won't be too soon because we already can
+			 * draw now but we skip. we set timeout > 0 to draw on
+			 * SU-timeout even without new content.
+			 */
+			timeout = minlatency;
+			continue;
+		}
+		#endif // SYNC_PATCH
+
+		timeout = maxlatency;
 
 		#if BLINKING_CURSOR_PATCH
-		if ((blinkset||cursorblinks) && blinktimeout) {
-    #else
-		if (blinkset && blinktimeout) {
-    #endif
-			if (TIMEDIFF(now, lastblink) >= blinktimeout) {
-				tsetdirtattr(ATTR_BLINK);
+		if (blinktimeout && (cursorblinks || tattrset(ATTR_BLINK)))
+		#else
+		if (blinktimeout && tattrset(ATTR_BLINK))
+		#endif // BLINKING_CURSOR_PATCH
+		{
+			timeout = blinktimeout - TIMEDIFF(now, lastblink);
+			if (timeout <= 0) {
+				if (-timeout > blinktimeout) /* start visible */
+					win.mode |= MODE_BLINK;
 				win.mode ^= MODE_BLINK;
+				tsetdirtattr(ATTR_BLINK);
 				lastblink = now;
-			} else {
-				msecs = MIN(msecs, blinktimeout - \
-						TIMEDIFF(now, lastblink));
+				timeout = blinktimeout;
 			}
 		}
+
 		if (repeat.len > 0) {
 			if (TIMEDIFF(now, repeat.last) >= \
 					(repeat.started ? keyrepeatinterval : \
@@ -2417,7 +2484,7 @@ run(void)
 				repeat.last = now;
 				ttywrite(repeat.str, repeat.len, 1);
 			} else {
-				msecs = MIN(msecs, (repeat.started ? \
+				timeout = MIN(timeout, (repeat.started ? \
 							keyrepeatinterval : keyrepeatdelay) - \
 						TIMEDIFF(now, repeat.last));
 			}
@@ -2425,16 +2492,9 @@ run(void)
 
 		draw();
 
-		if (msecs == -1) {
-			tv = NULL;
-		} else {
-			drawtimeout.tv_nsec = 1E6 * msecs;
-			drawtimeout.tv_sec = 0;
-			tv = &drawtimeout;
-		}
-
 		wl_display_dispatch_pending(wl.dpy);
 		wl_display_flush(wl.dpy);
+    drawing = 0;
 	}
 }
 
