@@ -203,7 +203,7 @@ st-wl-mono| simpleterm monocolor,
 	Se=\E[2 q,
 	Ss=\E[%p1%d q,
 # sync patch / SYNC_PATCH
-	Sync=\EP=%p1%ds\E\\,
+  Sync=\E[?2026%?%p1%{1}%-%tl%eh%;,
 
 st-wl| simpleterm,
 	use=st-wl-mono,

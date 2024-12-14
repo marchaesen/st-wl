@@ -44,6 +44,11 @@ typedef struct {
   int screen;
 } Axiskey;
 
+#if CSI_22_23_PATCH
+/* size of title stack */
+#define TITLESTACKSIZE 8
+#endif // CSI_22_23_PATCH
+
 /* Key modifiers */
 #define MOD_MASK_ANY    UINT_MAX
 #define MOD_MASK_NONE   0
@@ -226,6 +231,11 @@ static WLD wld;
 static Cursor cursor;
 static Repeat repeat;
 static int oldx, oldy;
+
+#if CSI_22_23_PATCH
+static int tstki; /* title stack index */
+static char *titlestack[TITLESTACKSIZE]; /* title stack */
+#endif // CSI_22_23_PATCH
 
 static struct wl_callback_listener framelistener = { framedone };
 static struct wl_registry_listener reglistener = { regglobal,
@@ -1080,12 +1090,50 @@ wlresize(int col, int row)
   wl.resized = true;
 }
 
+#if CSI_22_23_PATCH
+void
+xsettitle(char *p, int pop)
+{
+	free(titlestack[tstki]);
+	if (pop) {
+		titlestack[tstki] = NULL;
+		tstki = (tstki - 1 + TITLESTACKSIZE) % TITLESTACKSIZE;
+		p = titlestack[tstki] ? titlestack[tstki] : opt_title;
+	} else if (p && p[0] != '\0') {
+		titlestack[tstki] = xstrdup(p);
+	} else {
+		titlestack[tstki] = NULL;
+		p = opt_title;
+	}
+	xdg_toplevel_set_title(wl.xdgtoplevel, p);
+}
+
+void
+xpushtitle(void)
+{
+	int tstkin = (tstki + 1) % TITLESTACKSIZE;
+
+	free(titlestack[tstkin]);
+	titlestack[tstkin] = titlestack[tstki] ? xstrdup(titlestack[tstki]) : NULL;
+	tstki = tstkin;
+}
+
+void
+xfreetitlestack(void)
+{
+	for (int i = 0; i < LEN(titlestack); i++) {
+		free(titlestack[i]);
+		titlestack[i] = NULL;
+	}
+}
+#else
 void
 xsettitle(char *title)
 {
 	DEFAULT(title, opt_title);
 	xdg_toplevel_set_title(wl.xdgtoplevel, title);
 }
+#endif
 
 void
 surfenter(void *data, struct wl_surface *surface, struct wl_output *output)

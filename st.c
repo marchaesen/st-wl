@@ -2079,6 +2079,14 @@ tsetmode(int priv, int set, const int *args, int narg)
 				break;
       case 7727: /* Application Escape mode -> not implemented */
         break;
+      case 2026: /* https://gitlab.com/gnachman/iterm2/-/wikis/synchronized-updates-spec */
+	    #if SYNC_PATCH
+		    if (set)
+			    tsync_begin();  /* BSU */
+		    else
+			    tsync_end();  /* ESU */
+    	  #endif // SYNC_PATCH
+        break;
 			#if SIXEL_PATCH
 			case 80: /* DECSDM -- Sixel Display Mode */
 				MODBIT(term.mode, set, MODE_SIXEL_SDM);
@@ -2144,7 +2152,7 @@ csihandle(void)
 	default:
 	unknown:
 #ifdef DEBUG
-		fprintf(stderr, "erresc: unknown csi ");
+		fprintf(stderr, "erresc: unknown csi %c %d -> ", csiescseq.mode[0], csiescseq.narg);
 		csidump();
 #endif
 		/* die(""); */
