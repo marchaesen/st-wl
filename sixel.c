@@ -372,9 +372,11 @@ sixel_parser_parse(sixel_state_t *st, const unsigned char *p, size_t len)
 
 		case PS_DECSIXEL:
 			switch (*p) {
-			case '\x1b':
+			case 0x1b:
 				st->state = PS_ESC;
 				break;
+      case 0x9c:
+        goto end;
 			case '"':
 				st->param = 0;
 				st->nparams = 0;
@@ -490,9 +492,11 @@ sixel_parser_parse(sixel_state_t *st, const unsigned char *p, size_t len)
 		case PS_DECGRA:
 			/* DECGRA Set Raster Attributes " Pan; Pad; Ph; Pv */
 			switch (*p) {
-			case '\x1b':
+			case 0x1b:
 				st->state = PS_ESC;
 				break;
+      case 0x9c:
+        goto end;
 			case '0':
 			case '1':
 			case '2':
@@ -558,9 +562,11 @@ sixel_parser_parse(sixel_state_t *st, const unsigned char *p, size_t len)
 		case PS_DECGRI:
 			/* DECGRI Graphics Repeat Introducer ! Pn Ch */
 			switch (*p) {
-			case '\x1b':
+			case 0x1b:
 				st->state = PS_ESC;
 				break;
+      case 0x9c:
+        goto end;
 			case '0':
 			case '1':
 			case '2':
@@ -587,9 +593,11 @@ sixel_parser_parse(sixel_state_t *st, const unsigned char *p, size_t len)
 		case PS_DECGCI:
 			/* DECGCI Graphics Color Introducer # Pc; Pu; Px; Py; Pz */
 			switch (*p) {
-			case '\x1b':
+			case 0x1b:
 				st->state = PS_ESC;
 				break;
+      case 0x9c:
+        goto end;
 			case '0':
 			case '1':
 			case '2':
@@ -651,6 +659,9 @@ sixel_parser_parse(sixel_state_t *st, const unsigned char *p, size_t len)
 				st->state = PS_ESC;
 				goto end;
 			}
+      else if (*p == 0x9c) {
+        goto end;
+      }
 			p++;
 			break;
 		default:

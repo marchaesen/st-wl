@@ -3118,7 +3118,8 @@ tstrsequence(uchar c)
 	case 0x90:   /* DCS -- Device Control String */
 		c = 'P';
 		#if SIXEL_PATCH
-		term.esc |= ESC_DCS;
+		term.esc |= ESC_DCS | ESC_START;
+	  csiescseq.len=0;
 		#endif // SIXEL_PATCH
 		break;
 	case 0x9f:   /* APC -- Application Program Command */
@@ -3223,8 +3224,8 @@ tcontrolcode(uchar ascii)
 		ttywrite(vtiden, strlen(vtiden), 0);
 		break;
 	case 0x9b:   /* TODO: CSI */
-	case 0x9c:   /* TODO: ST */
 		break;
+	case 0x9c:   /* SIXEL END */
 	case 0x90:   /* DCS -- Device Control String */
 	case 0x9d:   /* OSC -- Operating System Command */
 	case 0x9e:   /* PM -- Privacy Message */
@@ -3422,7 +3423,16 @@ tputc(Rune u)
 		if (u == '\a' || u == 030 || u == 032 || u == 033 ||
 		   ISCONTROLC1(u)) {
 			#if SIXEL_PATCH
-			term.esc &= ~(ESC_START|ESC_STR|ESC_DCS);
+      if (u==0x9c)
+      {
+			  term.esc = ESC_START;
+        u = '\\';
+        control = 0; // consider this as ESC\\ (end of sixel buffer)
+      }
+      else
+      {
+			  term.esc &= ~(ESC_START|ESC_STR|ESC_DCS);
+      }
 			#else
 			term.esc &= ~(ESC_START|ESC_STR);
 			#endif // SIXEL_PATCH
@@ -3467,9 +3477,6 @@ check_control_code:
 	 * they must not cause conflicts with sequences.
 	 */
 	if (control) {
-		/* in UTF-8 mode ignore handling C1 control characters */
-		if (IS_SET(MODE_UTF8) && ISCONTROLC1(u))
-			return;
 		tcontrolcode(u);
 		/*
 		 * control codes are not shown ever
@@ -3588,7 +3595,11 @@ twrite(const char *buf, int buflen, int show_ctrl)
 		#if SIXEL_PATCH
 		if (IS_SET(MODE_SIXEL) && sixel_st.state != PS_ESC) {
 			charsize = sixel_parser_parse(&sixel_st, (const unsigned char*)buf + n, buflen - n);
-			continue;
+      if (charsize)
+			  continue;
+      // this means also the end of the sixel, so 
+			u = buf[n] & 0xFF;
+      charsize=1;
 		} else if (IS_SET(MODE_UTF8))
 		#else
 		if (IS_SET(MODE_UTF8))
@@ -3598,6 +3609,8 @@ twrite(const char *buf, int buflen, int show_ctrl)
 			charsize = utf8decode(buf + n, &u, buflen - n);
 			if (charsize == 0)
 				break;
+      if (u==UTF_INVALID)
+			  u = buf[n] & 0xFF;
 		} else {
 			u = buf[n] & 0xFF;
 			charsize = 1;
