@@ -2496,16 +2496,9 @@ run(void)
 		{
 			if (!drawing) {
 				trigger = now;
-				#if BLINKING_CURSOR_PATCH
-				if (IS_SET(MODE_BLINK)) {
-					win.mode ^= MODE_BLINK;
-				}
-				lastblink = now;
-				#endif // BLINKING_CURSOR_PATCH
         drawing=1;
       }
-			timeout = (maxlatency - TIMEDIFF(now, trigger)) \
-			          / maxlatency * minlatency;
+			timeout = (maxlatency - TIMEDIFF(now, trigger));
 			if (timeout > 0)
       {
 				continue;  /* we have time, try to find idle */
@@ -2536,12 +2529,9 @@ run(void)
 		{
 			timeout = blinktimeout - TIMEDIFF(now, lastblink);
 			if (timeout <= 0) {
-				if (-timeout > blinktimeout) /* start visible */
-					win.mode |= MODE_BLINK;
 				win.mode ^= MODE_BLINK;
 				tsetdirtattr(ATTR_BLINK);
 				lastblink = now;
-				timeout = blinktimeout;
 			}
 		}
 
