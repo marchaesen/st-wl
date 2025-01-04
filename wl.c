@@ -130,7 +130,7 @@ typedef struct {
 	struct wld_context *ctx;
 	struct wld_font_context *fontctx;
 	struct wld_renderer *renderer;
-	struct wld_buffer *buffer, *oldbuffer;
+	struct wld_buffer *buffer;
 } WLD;
 
 typedef struct {
@@ -1087,7 +1087,7 @@ wlresize(int col, int row)
 	win.tw = col * win.cw;
 	win.th = row * win.ch;
 
-	wld.oldbuffer = wld.buffer;
+  if (wld.buffer) wld_buffer_unreference(wld.buffer);
 	wld.buffer = wld_create_buffer(wld.ctx, win.w, win.h,
 			WLD_FORMAT_ARGB8888, 0);
 	wld_export(wld.buffer, WLD_WAYLAND_OBJECT_BUFFER, &object);
@@ -1603,12 +1603,6 @@ xfinishdraw(void)
   wld_flush(wld.renderer);
   wl_surface_attach(wl.surface, wl.buffer, 0, 0);
   wl_surface_commit(wl.surface);
-  /* need to wait to destroy the old buffer until we commit the new
-   * buffer */
-  if (wld.oldbuffer) {
-    wld_buffer_unreference(wld.oldbuffer);
-    wld.oldbuffer = 0;
-  }
   wl.needdraw = false;
 }
 
