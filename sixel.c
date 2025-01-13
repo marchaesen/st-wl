@@ -8,6 +8,7 @@
 
 #include "st.h"
 #include "win.h"
+#if SIXEL_PATCH
 #include "sixel.h"
 #include "sixel_hls.h"
 
@@ -679,3 +680,4 @@ sixel_parser_deinit(sixel_state_t *st)
 	if (st)
 		sixel_image_deinit(&st->image);
 }
+#endif
