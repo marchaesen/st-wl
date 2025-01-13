@@ -181,7 +181,6 @@ static void wlresize(int, int);
 static void cresize(int, int);
 static void surfenter(void *, struct wl_surface *, struct wl_output *);
 static void surfleave(void *, struct wl_surface *, struct wl_output *);
-static void framedone(void *, struct wl_callback *, uint32_t);
 static void xdgsurfconfigure(void *, struct xdg_surface *, uint32_t);
 static void xdgtoplevelconfigure(void *, struct xdg_toplevel *,
 		int32_t, int32_t, struct wl_array *);
@@ -237,7 +236,6 @@ static int tstki; /* title stack index */
 static char *titlestack[TITLESTACKSIZE]; /* title stack */
 #endif // CSI_22_23_PATCH
 
-static struct wl_callback_listener framelistener = { framedone };
 static struct wl_registry_listener reglistener = { regglobal,
 		regglobalremove };
 static struct wl_surface_listener surflistener = { surfenter, surfleave };
@@ -1155,16 +1153,6 @@ surfleave(void *data, struct wl_surface *surface, struct wl_output *output)
 }
 
 void
-framedone(void *data, struct wl_callback *callback, uint32_t msecs)
-{
-	wl_callback_destroy(callback);
-	wl.framecb = NULL;
-	if (wl.needdraw && IS_SET(MODE_VISIBLE)) {
-		draw();
-	}
-}
-
-void
 xdgsurfconfigure(void *data, struct xdg_surface *surf, uint32_t serial)
 {
 	xdg_surface_ack_configure(surf, serial);
@@ -1598,8 +1586,6 @@ xfinishdraw(void)
   }
 #endif // SIXEL_PATCH
 
-  wl.framecb = wl_surface_frame(wl.surface);
-  wl_callback_add_listener(wl.framecb, &framelistener, NULL);
   wld_flush(wld.renderer);
   wl_surface_attach(wl.surface, wl.buffer, 0, 0);
   wl_surface_commit(wl.surface);
@@ -2421,8 +2407,8 @@ run(void)
 	fd_set rfd;
 	int wlfd = wl_display_get_fd(wl.dpy), blinkset = 0;
 	int ttyfd;
-  int drawing;
-	struct timespec drawtimeout, *tv = NULL, now, lastblink, trigger;
+	int drawing;
+	struct timespec drawtimeout, now, lastblink, trigger;
 	long timeout;
 
 	/* Look for initial configure. */
@@ -2435,26 +2421,24 @@ run(void)
 
 	clock_gettime(CLOCK_MONOTONIC, &lastblink);
 
+	drawtimeout.tv_sec = 0;
+
 	for (drawing=0, timeout=0;;) {
 		FD_ZERO(&rfd);
 		FD_SET(ttyfd, &rfd);
 		FD_SET(wlfd, &rfd);
 
 		#if SYNC_PATCH
-    if (ttyread_pending())
-      timeout=0;
-    #endif
+		if (ttyread_pending())
+			timeout=0;
+		#endif
 
-    if (timeout>=0)
-    {
-      drawtimeout.tv_nsec = 1E6 * timeout;
-      drawtimeout.tv_sec = 0;
-      tv = &drawtimeout;
-    }
-    else
-      tv = NULL;
+		if (timeout<0)
+			timeout=0;
 
-		if (pselect(MAX(wlfd, ttyfd)+1, &rfd, NULL, NULL, tv, NULL) < 0) {
+		drawtimeout.tv_nsec = 1000000 * timeout;
+
+		if (pselect(MAX(wlfd, ttyfd)+1, &rfd, NULL, NULL, &drawtimeout, NULL) < 0) {
 			if (errno == EINTR)
 				continue;
 			die("select failed: %s\n", strerror(errno));
@@ -2463,16 +2447,16 @@ run(void)
 		#if SYNC_PATCH
 		int ttyin = FD_ISSET(ttyfd, &rfd) || ttyread_pending();
 		if (ttyin)
-    #else
+		#else
 		if (FD_ISSET(ttyfd, &rfd))
-    #endif
-    {
+		#endif
+		{
 			ttyread();
 		}
 
-  	int xev = 0;
-    if (FD_ISSET(wlfd, &rfd))
-      wl_display_dispatch(wl.dpy);
+		int xev = 0;
+		if (FD_ISSET(wlfd, &rfd))
+			wl_display_dispatch(wl.dpy);
 
 		clock_gettime(CLOCK_MONOTONIC, &now);
 
@@ -2531,6 +2515,7 @@ run(void)
 				win.mode ^= MODE_BLINK;
 				tsetdirtattr(ATTR_BLINK);
 				lastblink = now;
+				wlneeddraw();
 			}
 		}
 
@@ -2541,6 +2526,7 @@ run(void)
 				repeat.started = true;
 				repeat.last = now;
 				ttywrite(repeat.str, repeat.len, 1);
+				wlneeddraw();
 			} else {
 				timeout = MIN(timeout, (repeat.started ? \
 							keyrepeatinterval : keyrepeatdelay) - \
@@ -2548,11 +2534,14 @@ run(void)
 			}
 		}
 
+		if (!wl.needdraw)
+			continue;
+
 		draw();
 
-		wl_display_dispatch_pending(wl.dpy);
+//		wl_display_dispatch_pending(wl.dpy);
 		wl_display_flush(wl.dpy);
-    drawing = 0;
+		drawing = 0;
 	}
 }
 
