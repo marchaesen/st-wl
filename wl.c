@@ -2077,7 +2077,7 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 			case 0: /* Blinking Block */
 			case 1: /* Blinking Block (Default) */
 			  #if BLINKING_CURSOR_PATCH
-			  if (IS_SET(MODE_BLINK))
+			  if (!IS_SET(MODE_BLINK) || (g.mode & ATTR_REVERSE))
 				  break;
 			  /* FALLTHROUGH */
 			  #endif // BLINKING_CURSOR_PATCH
@@ -2086,7 +2086,7 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 				break;
 			case 3: /* Blinking Underline */
 			  #if BLINKING_CURSOR_PATCH
-			  if (IS_SET(MODE_BLINK))
+			  if (!IS_SET(MODE_BLINK) || (g.mode & ATTR_REVERSE))
 			  	break;
 			  /* FALLTHROUGH */
 			  #endif // BLINKING_CURSOR_PATCH
@@ -2105,8 +2105,8 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 				break;
 			case 5: /* Blinking bar */
 			#if BLINKING_CURSOR_PATCH
-			if (IS_SET(MODE_BLINK))
-				break;
+			  if (!IS_SET(MODE_BLINK) || (g.mode & ATTR_REVERSE))
+					break;
 			/* FALLTHROUGH */
 			#endif // BLINKING_CURSOR_PATCH
 			case 6: /* Steady bar */
@@ -2120,16 +2120,16 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
             #endif
 						cursorthickness, win.ch);
 				break;
-		#if BLINKING_CURSOR_PATCH
-		case 7: /* Blinking st cursor */
-			if (IS_SET(MODE_BLINK))
+			#if BLINKING_CURSOR_PATCH
+			case 7: /* Blinking st cursor */
+			  if (!IS_SET(MODE_BLINK) || (g.mode & ATTR_REVERSE))
+					break;
+				/* FALLTHROUGH */
+			case 8: /* Steady st cursor */
+				g.u = stcursor;
+		    wldrawglyph(g, cx, cy);
 				break;
-			/* FALLTHROUGH */
-		case 8: /* Steady st cursor */
-			g.u = stcursor;
-	    wldrawglyph(g, cx, cy);
-			break;
-		#endif // BLINKING_CURSOR_PATCH
+			#endif // BLINKING_CURSOR_PATCH
 		}
 	} else {
 		wld_fill_rectangle(wld.renderer, drawcol,
@@ -2510,27 +2510,57 @@ run(void)
 		if (blinktimeout && tattrset(ATTR_BLINK))
 		#endif // BLINKING_CURSOR_PATCH
 		{
-			timeout = blinktimeout - TIMEDIFF(now, lastblink);
-			if (timeout <= 0) {
+			long blinkDelay = blinktimeout - TIMEDIFF(now, lastblink);
+			if (blinkDelay <= 0)
+			{
 				win.mode ^= MODE_BLINK;
 				tsetdirtattr(ATTR_BLINK);
 				lastblink = now;
 				wlneeddraw();
 			}
+			else
+			{
+				timeout = blinkDelay;
+			}
 		}
 
-		if (repeat.len > 0) {
-			if (TIMEDIFF(now, repeat.last) >= \
-					(repeat.started ? keyrepeatinterval : \
-					 keyrepeatdelay)) {
-				repeat.started = true;
-				repeat.last = now;
-				ttywrite(repeat.str, repeat.len, 1);
-				wlneeddraw();
-			} else {
-				timeout = MIN(timeout, (repeat.started ? \
-							keyrepeatinterval : keyrepeatdelay) - \
-						TIMEDIFF(now, repeat.last));
+		if (repeat.len > 0)
+		{
+			long timeDiff = TIMEDIFF(now, repeat.last);
+			if ( !repeat.started)
+			{
+				if (timeDiff >= keyrepeatdelay)
+				{
+					repeat.started = true;
+					timeout = keyrepeatinterval;
+					repeat.last = now;
+					ttywrite(repeat.str, repeat.len, 1);
+					win.mode |= MODE_BLINK; // during repeak, disable blinking
+					tsetdirtattr(ATTR_BLINK);
+					lastblink = now;
+					wlneeddraw();
+				}
+				else
+				{
+					timeout = keyrepeatdelay - timeDiff;
+				}
+			}
+			else
+			{
+				if (timeDiff >= keyrepeatinterval)
+				{
+					repeat.last = now;
+					timeout = keyrepeatinterval;
+					ttywrite(repeat.str, repeat.len, 1);
+					win.mode |= MODE_BLINK; // during repeak, disable blinking
+					tsetdirtattr(ATTR_BLINK);
+					lastblink = now;
+					wlneeddraw();
+				}
+				else
+				{
+					timeout = keyrepeatinterval - timeDiff;
+				}
 			}
 		}
 

@@ -37,7 +37,7 @@
 				(a).bg != (b).bg)
 #endif // LIGATURES_PATCH
 #define TIMEDIFF(t1, t2)	((t1.tv_sec-t2.tv_sec)*1000 + \
-				(t1.tv_nsec-t2.tv_nsec)/1E6)
+				(t1.tv_nsec-t2.tv_nsec)/1000000)
 #define MODBIT(x, set, bit)	((set) ? ((x) |= (bit)) : ((x) &= ~(bit)))
 
 #define TRUECOLOR(r,g,b)	(1 << 24 | (r) << 16 | (g) << 8 | (b))
