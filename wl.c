@@ -76,7 +76,8 @@ static void zoomreset(const Arg *);
 #include "config.h"
 
 /* Macros */
-#define IS_SET(flag)		((win.mode & (flag)) != 0)
+#define IS_FLAG_SET(g, flag)		((g.mode & (flag)) != 0)
+#define IS_SET(flag)		(IS_FLAG_SET(win, (flag)))
 
 typedef struct {
 	struct xkb_context *ctx;
@@ -2077,7 +2078,7 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 			case 0: /* Blinking Block */
 			case 1: /* Blinking Block (Default) */
 			  #if BLINKING_CURSOR_PATCH
-			  if (!IS_SET(MODE_BLINK) || (g.mode & ATTR_REVERSE))
+			  if (IS_SET(MODE_BLINK) == IS_FLAG_SET(g, ATTR_REVERSE))
 				  break;
 			  /* FALLTHROUGH */
 			  #endif // BLINKING_CURSOR_PATCH
@@ -2086,7 +2087,7 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 				break;
 			case 3: /* Blinking Underline */
 			  #if BLINKING_CURSOR_PATCH
-			  if (!IS_SET(MODE_BLINK) || (g.mode & ATTR_REVERSE))
+			  if (IS_SET(MODE_BLINK) == IS_FLAG_SET(g, ATTR_REVERSE))
 			  	break;
 			  /* FALLTHROUGH */
 			  #endif // BLINKING_CURSOR_PATCH
@@ -2105,7 +2106,7 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 				break;
 			case 5: /* Blinking bar */
 			#if BLINKING_CURSOR_PATCH
-			  if (!IS_SET(MODE_BLINK) || (g.mode & ATTR_REVERSE))
+			  if (IS_SET(MODE_BLINK) == IS_FLAG_SET(g, ATTR_REVERSE))
 					break;
 			/* FALLTHROUGH */
 			#endif // BLINKING_CURSOR_PATCH
@@ -2122,7 +2123,7 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 				break;
 			#if BLINKING_CURSOR_PATCH
 			case 7: /* Blinking st cursor */
-			  if (!IS_SET(MODE_BLINK) || (g.mode & ATTR_REVERSE))
+			  if (IS_SET(MODE_BLINK) == IS_FLAG_SET(g, ATTR_REVERSE))
 					break;
 				/* FALLTHROUGH */
 			case 8: /* Steady st cursor */
