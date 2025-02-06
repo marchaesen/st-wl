@@ -1944,6 +1944,8 @@ wldrawglyph(Glyph g, int x, int y)
 	size_t len = utf8encode(g.u, buf);
 	int width = g.mode & ATTR_WIDE ? 2 : 1;
 
+	g.mode &= ~ATTR_REVERSE; // This function is only used for the cursor, so the reverse attribute is not needed (otherwise the cursor stops blinking in certain cases)
+
 	wldraws(buf, g, x, y, width, len);
 }
 
