@@ -828,6 +828,21 @@ bool wld_lookup_named_color(const char * name, uint32_t * color)
         if (*end == '\0')
             return true;
     }
+    else if (strncmp(name, "rgb:", 4) == 0)
+    {
+        unsigned red=strtoul(name + 4, &end, 16)&0xff;
+        if (end)
+        {
+          unsigned green=strtoul(end + 1, &end, 16)&0xff;
+          if (end)
+          {
+            unsigned blue=strtoul(end + 1, &end, 16)&0xff;
+            *color = 0xff000000 | (red << 16) | (green << 8) | blue;
+            if (*end == '\0')
+              return true;
+          }
+        }
+    }
 
     while (low <= high)
     {
