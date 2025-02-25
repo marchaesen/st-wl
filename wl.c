@@ -958,8 +958,8 @@ send:
 	repeat.key = key;
 	repeat.len = len;
 	repeat.started = false;
-	clock_gettime(CLOCK_MONOTONIC, &repeat.last);
 	ttywrite(str, len, 1);
+	clock_gettime(CLOCK_MONOTONIC, &repeat.last);
 }
 
 void
