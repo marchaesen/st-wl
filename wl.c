@@ -442,7 +442,7 @@ wlmousereportmotion(wl_fixed_t fx, wl_fixed_t fy)
 	if (x == oldx && y == oldy)
 		return;
 
-  oldx = x;
+	oldx = x;
 	oldy = y;
 
 	if (!IS_SET(MODE_MOUSEMOTION) && !IS_SET(MODE_MOUSEMANY))
@@ -1466,14 +1466,14 @@ int
 xstartdraw(void)
 {
 	if(IS_SET(MODE_VISIBLE))
-  {
+	{
 		wld_set_target_buffer(wld.renderer, wld.buffer);
-    if (wl.resized)
-    {
-      wl.resized = false;
-      wlclear(0, 0, win.w, win.h);
-    }
-  }
+		if (wl.resized)
+		{
+			wl.resized = false;
+			wlclear(0, 0, win.w, win.h);
+		}
+	}
 	return IS_SET(MODE_VISIBLE);
 }
 
@@ -1493,9 +1493,9 @@ xdrawline(Line line, int x1, int y, int x2)
 		if (selected(x, y))
 			#if SELECTION_COLORS_PATCH
 			new.mode |= ATTR_SELECTED;
-      #else
+			#else
 			new.mode ^= ATTR_REVERSE;
-      #endif // SELECTION_COLORS_PATCH
+			#endif // SELECTION_COLORS_PATCH
 		if (ib > 0 && (ATTRCMP(base, new) || ib >= DRAW_BUF_SIZ-UTF_SIZ)) {
 			wldraws(buf, base, ox, y, ic, ib);
 			ic = ib = 0;
@@ -1513,51 +1513,51 @@ xdrawline(Line line, int x1, int y, int x2)
 
 	#if ANYSIZE_PATCH
 	wl_surface_damage(wl.surface, 0, win.vborderpx + y * win.ch, win.w, win.ch);
-  #else
+	#else
 	wl_surface_damage(wl.surface, 0, borderpx + y * win.ch, win.w, win.ch);
-  #endif
+	#endif
 }
 
 void
 xfinishdraw(void)
 {
 #if SIXEL_PATCH
-  ImageList *im, *next;
-  int width, height;
-  int del, desty, mode, x1, x2, xend;
+	ImageList *im, *next;
+	int width, height;
+	int del, desty, mode, x1, x2, xend;
 #if ANYSIZE_PATCH
-  int bw = win.hborderpx, bh = win.vborderpx;
+	int bw = win.hborderpx, bh = win.vborderpx;
 #else
-  int bw = borderpx, bh = borderpx;
+	int bw = borderpx, bh = borderpx;
 #endif // ANYSIZE_PATCH
-  Line line;
+	Line line;
 #endif // SIXEL_PATCH
 
 #if SIXEL_PATCH
-  for (im = term.images; im; im = next) {
-    next = im->next;
+	for (im = term.images; im; im = next) {
+		next = im->next;
 
-    /* do not draw or process the image, if it is not visible */
-    if (im->x >= term.col || im->y >= term.row || im->y < 0)
-      continue;
+		/* do not draw or process the image, if it is not visible */
+		if (im->x >= term.col || im->y >= term.row || im->y < 0)
+			continue;
 
 #if KEYBOARDSELECT_PATCH && REFLOW_PATCH
-    /* do not draw the image on the search bar */
-    if (im->y == term.row-1 && IS_SET(MODE_KBDSELECT) && kbds_issearchmode())
-      continue;
+		/* do not draw the image on the search bar */
+		if (im->y == term.row-1 && IS_SET(MODE_KBDSELECT) && kbds_issearchmode())
+			continue;
 #endif // KEYBOARDSELECT_PATCH
 
-    /* scale the image */
-    width = MAX(im->width * win.cw / im->cw, 1);
-    height = MAX(im->height * win.ch / im->ch, 1);
-    if (!im->pixmap) {
-      im->pixmap = pixman_image_create_bits_no_clear(
-          PIXMAN_a8r8g8b8, width, height,
-          (uint32_t *)im->pixels, width * sizeof(uint32_t));
-    }
+		/* scale the image */
+		width = MAX(im->width * win.cw / im->cw, 1);
+		height = MAX(im->height * win.ch / im->ch, 1);
+		if (!im->pixmap) {
+			im->pixmap = pixman_image_create_bits_no_clear(
+			    PIXMAN_a8r8g8b8, width, height,
+			    (uint32_t *)im->pixels, width * sizeof(uint32_t));
+		}
 
-    if (!im->pixmap)
-      continue;
+		if (!im->pixmap)
+			continue;
 
 		/* draw only the parts of the image that are not erased */
 		#if SCROLLBACK_PATCH || REFLOW_PATCH
@@ -1573,38 +1573,39 @@ xfinishdraw(void)
 					break;
 			}
 			if (mode) {
-        wld_composite_image(wld.renderer, im->pixmap, NULL,
-                           bw + x1 * win.cw, bh + im->y * win.ch,
-                           (x1 - im->x) * win.cw, 0,
-				                   MIN((x2 - x1) * win.cw, width - (x1 - im->x) * win.cw), height
-                           );
+				wld_composite_image(wld.renderer, im->pixmap, NULL,
+				                    bw + x1 * win.cw, bh + im->y * win.ch,
+				                    (x1 - im->x) * win.cw, 0,
+				                    MIN((x2 - x1) * win.cw, width - (x1 - im->x) * win.cw), height
+				                   );
 				del = 0;
 			}
 		}
 		/* if all the parts are erased, we can delete the entire image */
 		if (del && im->x + im->cols <= term.col)
 			delete_image(im);
-  }
+	}
 #endif // SIXEL_PATCH
 
-  wld_flush(wld.renderer);
-  wl_surface_attach(wl.surface, wl.buffer, 0, 0);
-  wl_surface_commit(wl.surface);
-  wl.needdraw = false;
+	wld_flush(wld.renderer);
+	wl_surface_attach(wl.surface, wl.buffer, 0, 0);
+	wl_surface_commit(wl.surface);
+	wl.needdraw = false;
 }
 
-void wltermclear(int col1, int row1, int col2, int row2) {
-  uint32_t color = dc.col[IS_SET(MODE_REVERSE) ? defaultfg : defaultbg];
-  color = (color & term_alpha << 24) | (color & 0x00FFFFFF);
+void wltermclear(int col1, int row1, int col2, int row2)
+{
+	uint32_t color = dc.col[IS_SET(MODE_REVERSE) ? defaultfg : defaultbg];
+	color = (color & term_alpha << 24) | (color & 0x00FFFFFF);
 	#if ANYSIZE_PATCH
-  wld_fill_rectangle(wld.renderer, color, win.hborderpx + col1 * win.cw,
-                     win.vborderpx + row1 * win.ch, (col2 - col1 + 1) * win.cw,
-                     (row2 - row1 + 1) * win.ch);
-  #else
-  wld_fill_rectangle(wld.renderer, color, borderpx + col1 * win.cw,
-                     borderpx + row1 * win.ch, (col2 - col1 + 1) * win.cw,
-                     (row2 - row1 + 1) * win.ch);
-  #endif
+	wld_fill_rectangle(wld.renderer, color, win.hborderpx + col1 * win.cw,
+	                   win.vborderpx + row1 * win.ch, (col2 - col1 + 1) * win.cw,
+	                   (row2 - row1 + 1) * win.ch);
+	#else
+	wld_fill_rectangle(wld.renderer, color, borderpx + col1 * win.cw,
+	                   borderpx + row1 * win.ch, (col2 - col1 + 1) * win.cw,
+	                   (row2 - row1 + 1) * win.ch);
+	#endif
 }
 
 /*
@@ -1614,7 +1615,7 @@ void
 wlclear(int x1, int y1, int x2, int y2)
 {
 	uint32_t color = dc.col[IS_SET(MODE_REVERSE) ? defaultfg : defaultbg];
-  color = (color & term_alpha << 24) | (color & 0x00FFFFFF);
+	color = (color & term_alpha << 24) | (color & 0x00FFFFFF);
 	wld_fill_rectangle(wld.renderer, color, x1, y1, x2 - x1, y2 - y1);
 }
 
@@ -1666,35 +1667,35 @@ wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
 	}
 
 	if (IS_TRUECOL(base.fg)) {
-	  #if SELECTION_COLORS_PATCH
-	  if ((base.mode & ATTR_SELECTED))
+		#if SELECTION_COLORS_PATCH
+		if ((base.mode & ATTR_SELECTED))
 			fg = dc.col[selectionfg] | 0xff000000;
-    else
-    #endif // SELECTION_COLORS_PATCH
-		  fg = base.fg | 0xff000000;
+		else
+		#endif // SELECTION_COLORS_PATCH
+			fg = base.fg | 0xff000000;
 	} else {
-	  #if SELECTION_COLORS_PATCH
-	  if ((base.mode & ATTR_SELECTED))
+		#if SELECTION_COLORS_PATCH
+		if ((base.mode & ATTR_SELECTED))
 			fg = dc.col[selectionfg];
-    else
-    #endif // SELECTION_COLORS_PATCH
-		  fg = dc.col[base.fg];
+		else
+		#endif // SELECTION_COLORS_PATCH
+			fg = dc.col[base.fg];
 	}
 
 	if (IS_TRUECOL(base.bg)) {
-	  #if SELECTION_COLORS_PATCH
-	  if (base.mode & ATTR_SELECTED)
-		  bg = dc.col[selectionbg] | 0xff000000;
-    else
-    #endif // SELECTION_COLORS_PATCH
-		  bg = base.bg | 0xff000000;
+		#if SELECTION_COLORS_PATCH
+		if (base.mode & ATTR_SELECTED)
+			bg = dc.col[selectionbg] | 0xff000000;
+		else
+		#endif // SELECTION_COLORS_PATCH
+			bg = base.bg | 0xff000000;
 	} else {
-	  #if SELECTION_COLORS_PATCH
-	  if (base.mode & ATTR_SELECTED)
-		  bg = dc.col[selectionbg];
-    else
-    #endif // SELECTION_COLORS_PATCH
-		  bg = dc.col[base.bg];
+		#if SELECTION_COLORS_PATCH
+		if (base.mode & ATTR_SELECTED)
+			bg = dc.col[selectionbg];
+		else
+		#endif // SELECTION_COLORS_PATCH
+			bg = dc.col[base.bg];
 	}
 
 	if (base.mode & ATTR_BOLD) {
@@ -1705,10 +1706,10 @@ wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
 	  #if SELECTION_COLORS_PATCH
 		if (BETWEEN(selectionfg, 0, 7) && !(base.mode & ATTR_FAINT))
 			fg = dc.col[selectionfg + 8];
-    #else
+		#else
 		if (BETWEEN(base.fg, 0, 7) && !(base.mode & ATTR_FAINT))
 			fg = dc.col[base.fg + 8];
-    #endif // SELECTION_COLORS_PATCH
+		#endif // SELECTION_COLORS_PATCH
 
 		if (base.mode & ATTR_ITALIC) {
 			font = &dc.ibfont;
