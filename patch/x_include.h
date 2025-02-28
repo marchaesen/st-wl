@@ -8,6 +8,9 @@
 #if BOXDRAW_PATCH
 #include "boxdraw.h"
 #endif
+#if DRAG_AND_DROP_PATCH
+#include "drag-n-drop.h"
+#endif
 #if OPENCOPIED_PATCH
 #include "opencopied.h"
 #endif
@@ -31,6 +34,9 @@
 #endif
 #if NETWMICON_PATCH || NETWMICON_FF_PATCH || NETWMICON_LEGACY_PATCH
 #include "netwmicon.h"
+#endif
+#if OPEN_SELECTED_TEXT_PATCH
+#include "openselectedtext.h"
 #endif
 #if RIGHTCLICKTOPLUMB_PATCH
 #include "rightclicktoplumb_x.h"

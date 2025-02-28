@@ -9,9 +9,15 @@
 #include <pixman.h>
 #include "patches.h"
 
+#if DYNAMIC_PADDING_PATCH
+#undef ANYSIZE_PATCH
+#define ANYSIZE_PATCH 1
+#endif // DYNAMIC_PADDING_PATCH
+
 /* Arbitrary sizes */
 #define UTF_SIZ       4
 #define ESC_BUF_SIZ   (128*UTF_SIZ)
+
 
 /* macros */
 #ifdef DEBUG
@@ -45,6 +51,12 @@
 #if SCROLLBACK_PATCH || REFLOW_PATCH
 #define HISTSIZE      2000
 #endif // SCROLLBACK_PATCH | REFLOW_PATCH
+
+#if DRAG_AND_DROP_PATCH
+#define HEX_TO_INT(c)		((c) >= '0' && (c) <= '9' ? (c) - '0' : \
+				(c) >= 'a' && (c) <= 'f' ? (c) - 'a' + 10 : \
+				(c) >= 'A' && (c) <= 'F' ? (c) - 'A' + 10 : -1)
+#endif // DRAG_AND_DROP_PATCH
 
 enum glyph_attribute {
 	ATTR_NULL           = 0,
