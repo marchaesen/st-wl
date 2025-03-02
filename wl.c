@@ -589,25 +589,25 @@ mousesel(int done)
 void
 setsel(char *str, uint32_t serial)
 {
-  if (!str)
-    return;
+	free(wlsel.primary);
+	wlsel.primary = str;
 
-  free(wlsel.primary);
-  wlsel.primary = str;
-
-  if (str) {
-    wlsel.source = wl_data_device_manager_create_data_source(wl.datadevmanager);
-    wl_data_source_add_listener(wlsel.source, &datasrclistener, NULL);
-    wl_data_source_offer(wlsel.source, "text/plain");
-    wl_data_source_offer(wlsel.source, "text/plain;charset=utf-8");
-    wl_data_source_offer(wlsel.source, "TEXT");
-    wl_data_source_offer(wlsel.source, "STRING");
-    wl_data_source_offer(wlsel.source, "UTF8_STRING");
-  } else {
-    wlsel.source = NULL;
-  }
-  wl_data_device_set_selection(wl.datadev, wlsel.source, serial);
-  wl_display_roundtrip(wl.dpy);
+	if (!str)
+	{
+		wlsel.source=NULL;
+	}
+	else
+	{
+		wlsel.source = wl_data_device_manager_create_data_source(wl.datadevmanager);
+		wl_data_source_add_listener(wlsel.source, &datasrclistener, NULL);
+		wl_data_source_offer(wlsel.source, "text/plain");
+		wl_data_source_offer(wlsel.source, "text/plain;charset=utf-8");
+		wl_data_source_offer(wlsel.source, "TEXT");
+		wl_data_source_offer(wlsel.source, "STRING");
+		wl_data_source_offer(wlsel.source, "UTF8_STRING");
+	}
+	wl_data_device_set_selection(wl.datadev, wlsel.source, serial);
+	wl_display_roundtrip(wl.dpy);
 }
 
 void
@@ -639,7 +639,7 @@ wlselpaste(void)
 		if (IS_SET(MODE_BRCKTPASTE))
 			ttywrite("\033[200~", 6, 0);
 		/* check if we are pasting from ourselves */
-		if (wlsel.source) {
+		if (wlsel.primary) {
 			str = wlsel.primary;
 			left = strlen(wlsel.primary);
 			while (left > 0) {
@@ -651,7 +651,7 @@ wlselpaste(void)
 			}
 		} else {
 			if (-1==pipe(fds))
-        fprintf(stderr, "Error creating pipe");
+				fprintf(stderr, "Error creating pipe");
 			wl_data_offer_receive(wl.seloffer, "text/plain", fds[1]);
 			wl_display_flush(wl.dpy);
 			close(fds[1]);
@@ -2281,13 +2281,8 @@ void
 datasrcsend(void *data, struct wl_data_source *source, const char *mimetype,
 		int32_t fd)
 {
-	char *buf = wlsel.primary;
-	int len = strlen(wlsel.primary);
-	ssize_t ret;
-	while ((ret = write(fd, buf, MIN(len, BUFSIZ))) > 0) {
-		len -= ret;
-		buf += ret;
-	}
+	if (wlsel.primary)
+		write(fd, wlsel.primary, strlen(wlsel.primary));
 	close(fd);
 }
 
@@ -2296,6 +2291,8 @@ datasrccancelled(void *data, struct wl_data_source *source)
 {
 	if (wlsel.source == source) {
 		wlsel.source = NULL;
+		free(wlsel.primary);
+		wlsel.primary = NULL;
 		selclear();
 	}
 	wl_data_source_destroy(source);
@@ -2399,10 +2396,11 @@ wlinit(int cols, int rows)
 	win.mode = MODE_NUMLOCK;
 	resettitle();
 
-	wlsel.tclick1 = 0;
-	wlsel.tclick2 = 0;
-	wlsel.primary = NULL;
-	wlsel.source = NULL;
+// Since this routine is only called at startup, and wlsel is a static variable, no need to initialize to zero
+//	wlsel.tclick1 = 0;
+//	wlsel.tclick2 = 0;
+//	wlsel.primary = NULL;
+//	wlsel.source = NULL;
 }
 
 void
