@@ -589,23 +589,19 @@ mousesel(int done)
 void
 setsel(char *str, uint32_t serial)
 {
+	if (!str)
+		return;
+
 	free(wlsel.primary);
 	wlsel.primary = str;
 
-	if (!str)
-	{
-		wlsel.source=NULL;
-	}
-	else
-	{
-		wlsel.source = wl_data_device_manager_create_data_source(wl.datadevmanager);
-		wl_data_source_add_listener(wlsel.source, &datasrclistener, NULL);
-		wl_data_source_offer(wlsel.source, "text/plain");
-		wl_data_source_offer(wlsel.source, "text/plain;charset=utf-8");
-		wl_data_source_offer(wlsel.source, "TEXT");
-		wl_data_source_offer(wlsel.source, "STRING");
-		wl_data_source_offer(wlsel.source, "UTF8_STRING");
-	}
+	wlsel.source = wl_data_device_manager_create_data_source(wl.datadevmanager);
+	wl_data_source_add_listener(wlsel.source, &datasrclistener, NULL);
+	wl_data_source_offer(wlsel.source, "text/plain");
+	wl_data_source_offer(wlsel.source, "text/plain;charset=utf-8");
+	wl_data_source_offer(wlsel.source, "TEXT");
+	wl_data_source_offer(wlsel.source, "STRING");
+	wl_data_source_offer(wlsel.source, "UTF8_STRING");
 	wl_data_device_set_selection(wl.datadev, wlsel.source, serial);
 	wl_display_roundtrip(wl.dpy);
 }
