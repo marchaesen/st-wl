@@ -2589,6 +2589,8 @@ usage(void)
 int
 main(int argc, char *argv[])
 {
+	// ignore broken pipe signal, happens a lot in the datasrcsend function....
+	sigaction(SIGPIPE, &(struct sigaction){SIG_IGN}, NULL);
 	#if BLINKING_CURSOR_PATCH
 	xsetcursor(cursorstyle);
 	#else
