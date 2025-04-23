@@ -2452,7 +2452,6 @@ run(void)
 			ttyread();
 		}
 
-		int xev = 0;
 		if (FD_ISSET(wlfd, &rfd))
 			wl_display_dispatch(wl.dpy);
 
@@ -2470,7 +2469,7 @@ run(void)
 		 * sync with periodic updates from animations/key-repeats/etc.
 		 */
 		#if SYNC_PATCH
-		if (ttyin || xev>0)
+		if (ttyin)
 		#else
 		if (FD_ISSET(ttyfd, &rfd))
 		#endif // SYNC_PATCH
