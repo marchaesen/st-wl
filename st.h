@@ -9,11 +9,6 @@
 #include <pixman.h>
 #include "patches.h"
 
-#if DYNAMIC_PADDING_PATCH
-#undef ANYSIZE_PATCH
-#define ANYSIZE_PATCH 1
-#endif // DYNAMIC_PADDING_PATCH
-
 /* Arbitrary sizes */
 #define UTF_SIZ       4
 #define ESC_BUF_SIZ   (128*UTF_SIZ)
