@@ -2433,6 +2433,8 @@ run(void)
 
 		if (timeout<0)
 			timeout=0;
+		else if (timeout > 999) // We assume the timeout is always less the 1 sec (we set drawtimeout.tv_sec always to 0)
+			timeout = 999;
 
 		drawtimeout.tv_nsec = 1000000 * timeout;
 
