@@ -956,6 +956,7 @@ send:
 	repeat.started = false;
 	ttywrite(str, len, 1);
 	clock_gettime(CLOCK_MONOTONIC, &repeat.last);
+	wlneeddraw();
 }
 
 void
@@ -2534,7 +2535,7 @@ run(void)
 					timeout = keyrepeatinterval;
 					repeat.last = now;
 					ttywrite(repeat.str, repeat.len, 1);
-					win.mode |= MODE_BLINK; // during repeak, disable blinking
+					win.mode |= MODE_BLINK; // during repeat, disable blinking
 					tsetdirtattr(ATTR_BLINK);
 					lastblink = now;
 					wlneeddraw();
@@ -2551,7 +2552,7 @@ run(void)
 					repeat.last = now;
 					timeout = keyrepeatinterval;
 					ttywrite(repeat.str, repeat.len, 1);
-					win.mode |= MODE_BLINK; // during repeak, disable blinking
+					win.mode |= MODE_BLINK; // during repeat, disable blinking
 					tsetdirtattr(ATTR_BLINK);
 					lastblink = now;
 					wlneeddraw();
