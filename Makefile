@@ -56,7 +56,7 @@ else
     quiet = $(if $2,$2,$($1))
 endif
 
-%.o %.d: %.c | .deps
+%.o .deps/%.d: %.c | .deps
 	$(call quiet,CC) $(STCFLAGS) -c $< -MMD -MP -MF .deps/$(@:.o=.d) -MT $(basename $@).o
 
 wl.o: xdg-shell-client-protocol.h xdg-decoration-protocol.h

@@ -77,7 +77,7 @@ all: $(TARGETS)
 .deps:
 	@mkdir "$@"
 
-$(THISDIR)%.o $(THISDIR)%.d: $(THISDIR)%.c | .deps
+$(THISDIR)%.o $(THISDIR).deps/%.d: $(THISDIR)%.c | .deps
 	$(compile) $(WLD_CPPFLAGS) $(WLD_PACKAGE_CFLAGS)
 
 libwld.a: $(WLD_STATIC_OBJECTS)
