@@ -34,7 +34,7 @@ INCS = -I. -I/usr/include `$(PKG_CONFIG) --cflags ${PKGCFG}` \
        `$(PKG_CONFIG) --cflags fontconfig` \
        `$(PKG_CONFIG) --cflags freetype2` \
        $(LIGATURES_INC)
-LIBS = -L/usr/lib -lc -lm -lrt -lutil `$(PKG_CONFIG) --libs ${PKGCFG}`\
+LIBS = -L/usr/lib -lc -lm -lutil `$(PKG_CONFIG) --libs ${PKGCFG}`\
        `$(PKG_CONFIG) --libs fontconfig` \
        `$(PKG_CONFIG) --libs freetype2` \
        $(LIGATURES_LIBS) \
@@ -46,10 +46,7 @@ STCFLAGS = $(DEBUGFLAGS) $(INCS) $(STCPPFLAGS) $(CPPFLAGS) $(CFLAGS)
 STLDFLAGS = wld/libwld.a $(LIBS) $(LDFLAGS)
 
 # OpenBSD:
-#CPPFLAGS = -DVERSION=\"$(VERSION)\" -D_XOPEN_SOURCE=600 -D_BSD_SOURCE
-#LIBS = -L$(X11LIB) -lm -lX11 -lutil -lXft \
-#       `pkg-config --libs fontconfig` \
-#       `pkg-config --libs freetype2`
+#CPPFLAGS = $(STCPPFLAGS) -D_XOPEN_SOURCE=600
 #MANPREFIX = ${PREFIX}/man
 
 # compiler and linker

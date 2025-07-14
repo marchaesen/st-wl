@@ -727,7 +727,7 @@ getsel(void)
 				}
 			}
 			if (sel.ne.y != y) {
-        lastx = sel.nb.x;
+				lastx = sel.nb.x;
 				const Glyph *gptest = &term.line[y][lastx];
 				while((lastx<term.col-1) && !IS_SNAP_LINE_DELIM(gptest->u)) {
 					lastx++;
@@ -738,7 +738,7 @@ getsel(void)
 				}
 			}
 			else
-			  lastx = sel.ne.x;
+				lastx = sel.ne.x;
 			#endif // SCROLLBACK_PATCH
 		}
 
@@ -1006,7 +1006,7 @@ ttyread(void)
 		if (buflen > 0)
 			memmove(buf, buf + written, buflen);
 
-    wlneeddraw();
+		wlneeddraw();
 		return ret;
 	}
 }
@@ -1151,7 +1151,7 @@ tsetdirt(int top, int bot)
 	for (i = top; i <= bot; i++)
 		term.dirty[i] = 1;
 
-    wlneeddraw();
+	wlneeddraw();
 }
 
 void
@@ -2077,16 +2077,8 @@ tsetmode(int priv, int set, const int *args, int narg)
 				      and can be mistaken for other control
 				      codes. */
 				break;
-      case 7727: /* Application Escape mode -> not implemented */
-        break;
-      case 2026: /* https://gitlab.com/gnachman/iterm2/-/wikis/synchronized-updates-spec */
-	    #if SYNC_PATCH
-		    if (set)
-			    tsync_begin();  /* BSU */
-		    else
-			    tsync_end();  /* ESU */
-    	  #endif // SYNC_PATCH
-        break;
+			case 7727: /* Application Escape mode -> not implemented */
+				break;
 			#if SIXEL_PATCH
 			case 80: /* DECSDM -- Sixel Display Mode */
 				MODBIT(term.mode, set, MODE_SIXEL_SDM);
@@ -2095,6 +2087,15 @@ tsetmode(int priv, int set, const int *args, int narg)
 				MODBIT(term.mode, set, MODE_SIXEL_CUR_RT);
 				break;
 			#endif // SIXEL_PATCH
+			#if SYNC_PATCH
+			case 2026:
+				if (set) {
+					tsync_begin();
+				} else {
+					tsync_end();
+				}
+				break;
+			#endif // SYNC_PATCH
 			default:
 				fprintf(stderr,
 					"erresc: unknown private set/reset mode %d\n",
@@ -2496,6 +2497,23 @@ csihandle(void)
 			goto unknown;
 		}
 		break;
+	#if SYNC_PATCH
+	case '$': /* DECRQM -- DEC Request Mode (private) */
+		if (csiescseq.mode[1] == 'p' && csiescseq.priv) {
+			switch (csiescseq.arg[0]) {
+			#if SYNC_PATCH
+			case 2026:
+				/* https://gist.github.com/christianparpart/d8a62cc1ab659194337d73e399004036 */
+				ttywrite(su ? "\033[?2026;1$y" : "\033[?2026;2$y", 11, 0);
+				break;
+			#endif // SYNC_PATCH
+			default:
+				goto unknown;
+			}
+			break;
+		}
+		goto unknown;
+	#endif // SYNC_PATCH
 	case 'r': /* DECSTBM -- Set Scrolling Region */
 		if (csiescseq.priv) {
 			goto unknown;
@@ -2559,7 +2577,11 @@ csihandle(void)
 		break;
 	#endif // CSI_22_23_PATCH | SIXEL_PATCH
 	case 'u': /* DECRC -- Restore cursor position (ANSI.SYS) */
-		tcursor(CURSOR_LOAD);
+		if (csiescseq.priv) {
+			goto unknown;
+		} else {
+			tcursor(CURSOR_LOAD);
+		}
 		break;
 	case ' ':
 		switch (csiescseq.mode[1]) {
@@ -2571,26 +2593,26 @@ csihandle(void)
 			goto unknown;
 		}
 		break;
-  case '>':
+	case '>':
 		switch (csiescseq.mode[1]) {
-      case 'q': // XTVERION
-			    n = snprintf(buffer, sizeof buffer, "\x1bP>|st-wl(0.9.2)\x1b\\");
-			    ttywrite(buffer, n, 1);
-        break;
-      case 'c': // Secondary DA (DA2)
-        /*
-         * >=96: vim sets ttymouse=xterm2
-         * >=141: vim uses tcap-query.
-         * >=277: vim uses sgr mouse tracking.
-         * >=279: xterm supports DECSLRM/DECLRMM.
-         */
-			    n = snprintf(buffer, sizeof buffer, "\x1b[>24;279;0c");
-			    ttywrite(buffer, n, 1);
-        break;
-      default:
-        goto unknown;
-    }
-    break;
+			case 'q': // XTVERION
+				n = snprintf(buffer, sizeof buffer, "\x1bP>|st-wl(0.9.2)\x1b\\");
+				ttywrite(buffer, n, 1);
+			break;
+			case 'c': // Secondary DA (DA2)
+				/*
+				 * >=96: vim sets ttymouse=xterm2
+				 * >=141: vim uses tcap-query.
+				 * >=277: vim uses sgr mouse tracking.
+				 * >=279: xterm supports DECSLRM/DECLRMM.
+				 */
+				n = snprintf(buffer, sizeof buffer, "\x1b[>24;279;0c");
+				ttywrite(buffer, n, 1);
+				break;
+			default:
+				goto unknown;
+		}
+		break;
 	}
 }
 
@@ -2631,6 +2653,7 @@ osc_color_response(int num, int index, int is_osc4)
 	int n;
 	char buf[32];
 	unsigned char r, g, b;
+
 	if (xgetcolor(is_osc4 ? num : index, &r, &g, &b)) {
 		fprintf(stderr, "erresc: failed to fetch %s color %d\n",
 		        is_osc4 ? "osc4" : "osc",
@@ -3119,7 +3142,7 @@ tstrsequence(uchar c)
 		c = 'P';
 		#if SIXEL_PATCH
 		term.esc |= ESC_DCS | ESC_START;
-	  csiescseq.len=0;
+		csiescseq.len=0;
 		#endif // SIXEL_PATCH
 		break;
 	case 0x9f:   /* APC -- Application Program Command */
@@ -3423,16 +3446,16 @@ tputc(Rune u)
 		if (u == '\a' || u == 030 || u == 032 || u == 033 ||
 		   ISCONTROLC1(u)) {
 			#if SIXEL_PATCH
-      if (u==0x9c)
-      {
-			  term.esc = ESC_START;
-        u = '\\';
-        control = 0; // consider this as ESC\\ (end of sixel buffer)
-      }
-      else
-      {
-			  term.esc &= ~(ESC_START|ESC_STR|ESC_DCS);
-      }
+			if (u==0x9c)
+			{
+				term.esc = ESC_START;
+				u = '\\';
+				control = 0; // consider this as ESC\\ (end of sixel buffer)
+			}
+			else
+			{
+				term.esc &= ~(ESC_START|ESC_STR|ESC_DCS);
+			}
 			#else
 			term.esc &= ~(ESC_START|ESC_STR);
 			#endif // SIXEL_PATCH
@@ -3595,11 +3618,11 @@ twrite(const char *buf, int buflen, int show_ctrl)
 		#if SIXEL_PATCH
 		if (IS_SET(MODE_SIXEL) && sixel_st.state != PS_ESC) {
 			charsize = sixel_parser_parse(&sixel_st, (const unsigned char*)buf + n, buflen - n);
-      if (charsize)
-			  continue;
-      // this means also the end of the sixel, so 
+			if (charsize)
+				continue;
+			// this means also the end of the sixel, so 
 			u = buf[n] & 0xFF;
-      charsize=1;
+			charsize=1;
 		} else if (IS_SET(MODE_UTF8))
 		#else
 		if (IS_SET(MODE_UTF8))
@@ -3609,8 +3632,8 @@ twrite(const char *buf, int buflen, int show_ctrl)
 			charsize = utf8decode(buf + n, &u, buflen - n);
 			if (charsize == 0)
 				break;
-      if (u==UTF_INVALID)
-			  u = buf[n] & 0xFF;
+			if (u==UTF_INVALID)
+				u = buf[n] & 0xFF;
 		} else {
 			u = buf[n] & 0xFF;
 			charsize = 1;
@@ -3811,20 +3834,20 @@ resettitle(void)
 void
 drawregion(int x1, int y1, int x2, int y2)
 {
-  int y;
+	int y;
 
-  for (y = y1; y < y2; y++) {
-    if (!term.dirty[y])
-      continue;
+	for (y = y1; y < y2; y++) {
+		if (!term.dirty[y])
+			continue;
 
-    wltermclear(0, y, term.col, y);
-    term.dirty[y] = 0;
+		wltermclear(0, y, term.col, y);
+		term.dirty[y] = 0;
 #if SCROLLBACK_PATCH || REFLOW_PATCH
-    xdrawline(TLINE(y), x1, y, x2);
+		xdrawline(TLINE(y), x1, y, x2);
 #else
-    xdrawline(term.line[y], x1, y, x2);
+		xdrawline(term.line[y], x1, y, x2);
 #endif // SCROLLBACK_PATCH
-  }
+	}
 }
 
 #include "patch/st_include.c"
