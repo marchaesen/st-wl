@@ -30,17 +30,26 @@ WLD_SOURCES =           \
     $(THISDIR)wayland.c           \
     $(THISDIR)wayland-shm.c
 
-
 ifeq ($(if $(V),$(V),0), 0)
-    define quiet
-        @echo "  $1	$@"
-        @$(if $2,$2,$($1))
-    endef
+  define quiet
+		@echo "  $1 $(notdir $(<:%.c=%.o))"
+		@$(if $2,$2,$($1))
+  endef
+  define quietlink
+		@echo "  $1 $(notdir $@)"
+		@$(if $2,$2,$($1))
+  endef
 else
-    quiet = $(if $2,$2,$($1))
+  define quiet
+		$(if $2,$2,$($1))
+  endef
+  define quietlink
+		$(if $2,$2,$($1))
+  endef
 endif
 
 WLD_STATIC_OBJECTS  = $(WLD_SOURCES:%.c=%.o)
+WLD_STATIC_DEPS := $(WLD_SOURCES:$(THISDIR)%.c=$(THISDIR).deps/%.d)
 WLD_PACKAGES        = fontconfig pixman-1 freetype2 wayland-client
 WLD_PACKAGE_CFLAGS ?= $(call pkgconfig,$(WLD_PACKAGES),cflags,CFLAGS)
 WLD_PACKAGE_LIBS   ?= $(call pkgconfig,$(WLD_PACKAGES),libs,LIBS)
@@ -65,8 +74,8 @@ CLEAN_FILES += $(WLD_STATIC_OBJECTS)
 
 CLEAN_FILES += $(TARGETS)
 
-compile     = $(call quiet,CC) $(FINAL_CPPFLAGS) $(FINAL_CFLAGS) -c -o $@ $< \
-              -MMD -MP -MF .deps/$(basename $(notdir $<)).d -MT $(basename $@).o
+compile     = $(call quiet,CC) $(FINAL_CPPFLAGS) $(FINAL_CFLAGS) -c -o $(<:%.c=%.o) $< \
+              -MMD -MP -MF .deps/$(basename $(notdir $<)).d -MT $(<:%.c=%.o)
 link        = $(call quiet,CCLD,$(CC)) $(LDFLAGS) -o $@ $^
 pkgconfig   = $(sort $(foreach pkg,$(1),$(if $($(pkg)_$(3)),$($(pkg)_$(3)), \
                                            $(shell $(PKG_CONFIG) --$(2) $(pkg)))))
@@ -81,7 +90,7 @@ $(THISDIR)%.o $(THISDIR).deps/%.d: $(THISDIR)%.c | .deps
 	$(compile) $(WLD_CPPFLAGS) $(WLD_PACKAGE_CFLAGS)
 
 libwld.a: $(WLD_STATIC_OBJECTS)
-	$(call quiet,AR) cr $@ $^
+	$(call quietlink,AR) cr $@ $^
 	@echo $(THISDIR)libwld.a: $(WLD_STATIC_OBJECTS) > .deps/libwld.d
 
 $(foreach dir,LIB PKGCONFIG,$(DESTDIR)$($(dir)DIR)) $(DESTDIR)$(INCLUDEDIR)/wld:
@@ -91,5 +100,5 @@ $(foreach dir,LIB PKGCONFIG,$(DESTDIR)$($(dir)DIR)) $(DESTDIR)$(INCLUDEDIR)/wld:
 clean:
 	rm -rf $(CLEAN_FILES)
 
--include .deps/*.d
+-include $(WLD_STATIC_DEPS)
 

@@ -1,6 +1,9 @@
 # st-wl - simple terminal
 # See LICENSE file for copyright and license details.
 
+CC = gcc
+CFLAGS = -pipe
+
 ifeq (,$(findstring j,$(MAKEFLAGS)))
 CPUS ?= $(shell nproc)
 MAKEFLAGS += -j $(CPUS)
@@ -15,6 +18,7 @@ endif
 
 SRC = st.c wl.c xdg-shell-protocol.c xdg-decoration-protocol.c $(SIXEL_C) $(LIGATURES_C)
 OBJ = $(SRC:.c=.o)
+DEP = $(SRC:%.c=.deps/%.d)
 
 all: st-wl
 
@@ -49,15 +53,24 @@ xdg-decoration-protocol.h:
 
 ifeq ($(if $(V),$(V),0), 0)
     define quiet
-        @echo "  $1	$@"
-        @$(if $2,$2,$($1))
+			@echo "  $1 $(notdir $(<:%.c=%.o))"
+      @$(if $2,$2,$($1))
+    endef
+    define quietlink
+			@echo "  $1 $(notdir $@)"
+      @$(if $2,$2,$($1))
     endef
 else
-    quiet = $(if $2,$2,$($1))
+    define quiet
+        $(if $2,$2,$($1))
+    endef
+    define quietlink
+        $(if $2,$2,$($1))
+    endef
 endif
 
 %.o .deps/%.d: %.c | .deps
-	$(call quiet,CC) $(STCFLAGS) -c $< -MMD -MP -MF .deps/$(@:.o=.d) -MT $(basename $@).o
+	$(call quiet,CC) $(STCFLAGS) -c $< -MMD -MP -MF .deps/$*.d -MT $*.o
 
 wl.o: xdg-shell-client-protocol.h xdg-decoration-protocol.h
 
@@ -67,7 +80,7 @@ $(OBJ): config.h config.mk patches.h
 $(THISDIR)wld/libwld.a config.h config.mk patches.h: options
 
 st-wl: $(THISDIR)wld/libwld.a $(OBJ)
-	$(call quiet,CC) $(STCFLAGS) -o $@ $(OBJ) $(STLDFLAGS)
+	$(call quietlink,CC) $(STCFLAGS) -o $@ $(OBJ) $(STLDFLAGS)
 
 $(THISDIR)wld/%.o:
 	@rm -f $@
@@ -101,5 +114,5 @@ uninstall:
 .PHONY: all clean dist install uninstall
 
 -include wld/.deps/*.d
--include .deps/*.d
+-include $(DEP)
 
