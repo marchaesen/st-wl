@@ -2804,9 +2804,6 @@ strhandle(void)
 				tfulldirt();
 			}
 			return;
-		case 112:
-			/* ????? */
-			return;
 		#if OSC133_PATCH
 		case 133:
 			if (narg < 2)
