@@ -314,7 +314,6 @@ void resettitle(void);
 
 void selclear(void);
 void selinit(void);
-void selremove(void);
 void selstart(int, int, int);
 void selextend(int, int, int, int);
 int selected(int, int);

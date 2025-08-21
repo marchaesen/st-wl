@@ -468,6 +468,9 @@ ptrenter(void *data, struct wl_pointer *pointer, uint32_t serial,
 	struct wl_cursor_image *img = cursor.cursor->images[0];
 	struct wl_buffer *buffer;
 
+	wl.px = wl_fixed_to_int(x);
+	wl.py = wl_fixed_to_int(y);
+
 	wl_pointer_set_cursor(pointer, serial, cursor.surface,
 			img->hotspot_x, img->hotspot_y);
 	buffer = wl_cursor_image_get_buffer(img);
@@ -486,13 +489,13 @@ void
 ptrmotion(void *data, struct wl_pointer * pointer, uint32_t serial,
 		wl_fixed_t x, wl_fixed_t y)
 {
+	wl.px = wl_fixed_to_int(x);
+	wl.py = wl_fixed_to_int(y);
+
 	if (IS_SET(MODE_MOUSE) && !(wl.xkb.mods & forceselmod)) {
 		wlmousereportmotion(x, y);
 		return;
 	}
-
-	wl.px = wl_fixed_to_int(x);
-	wl.py = wl_fixed_to_int(y);
 
 	mousesel(0);
 }

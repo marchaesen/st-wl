@@ -780,15 +780,9 @@ selclear(void)
 {
 	if (sel.ob.x == -1)
 		return;
-	selremove();
-	tsetdirt(sel.nb.y, sel.ne.y);
-}
 
-void
-selremove(void)
-{
-	sel.mode = SEL_IDLE;
-	sel.ob.x = -1;
+	tsetdirt(sel.nb.y, sel.ne.y);
+	selinit();
 }
 
 void
