@@ -71,7 +71,7 @@ static float chscale = 1.0;
  *
  * More advanced example: L" `'\"()[]{}"
  */
-wchar_t *worddelimiters = L" │|:`'\"()[]{}";
+wchar_t *worddelimiters = L" │|:`'\"()[]{}┃";
 wchar_t *snap_line_delimiters = L"│";
 
 #if KEYBOARDSELECT_PATCH && REFLOW_PATCH
