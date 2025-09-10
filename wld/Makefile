@@ -32,7 +32,7 @@ WLD_SOURCES =           \
 
 ifeq ($(if $(V),$(V),0), 0)
   define quiet
-		@echo "  $1 $(notdir $(<:%.c=%.o))"
+		@echo "  $1 $(notdir $(<:$(THISDIR)%.c=$(THISDIR).objects/%.o))"
 		@$(if $2,$2,$($1))
   endef
   define quietlink
@@ -48,7 +48,7 @@ else
   endef
 endif
 
-WLD_STATIC_OBJECTS  = $(WLD_SOURCES:%.c=%.o)
+WLD_STATIC_OBJECTS  = $(WLD_SOURCES:$(THISDIR)%.c=$(THISDIR).objects/%.o)
 WLD_STATIC_DEPS := $(WLD_SOURCES:$(THISDIR)%.c=$(THISDIR).deps/%.d)
 WLD_PACKAGES        = fontconfig pixman-1 freetype2 wayland-client
 WLD_PACKAGE_CFLAGS ?= $(call pkgconfig,$(WLD_PACKAGES),cflags,CFLAGS)
@@ -70,12 +70,11 @@ else
 endif
 
 TARGETS += libwld.a
-CLEAN_FILES += $(WLD_STATIC_OBJECTS)
 
 CLEAN_FILES += $(TARGETS)
 
-compile     = $(call quiet,CC) $(FINAL_CPPFLAGS) $(FINAL_CFLAGS) -c -o $(<:%.c=%.o) $< \
-              -MMD -MP -MF .deps/$(basename $(notdir $<)).d -MT $(<:%.c=%.o)
+compile     = $(call quiet,CC) $(FINAL_CPPFLAGS) $(FINAL_CFLAGS) -c -o $(<:$(THISDIR)%.c=$(THISDIR).objects/%.o) $< \
+              -MMD -MP -MF .deps/$(basename $(notdir $<)).d -MT $(<:$(THISDIR)%.c=$(THISDIR).objects/%.o)
 link        = $(call quiet,CCLD,$(CC)) $(LDFLAGS) -o $@ $^
 pkgconfig   = $(sort $(foreach pkg,$(1),$(if $($(pkg)_$(3)),$($(pkg)_$(3)), \
                                            $(shell $(PKG_CONFIG) --$(2) $(pkg)))))
@@ -83,10 +82,10 @@ pkgconfig   = $(sort $(foreach pkg,$(1),$(if $($(pkg)_$(3)),$($(pkg)_$(3)), \
 .PHONY: all
 all: $(TARGETS)
 
-.deps:
+.deps .objects:
 	@mkdir "$@"
 
-$(THISDIR)%.o $(THISDIR).deps/%.d: $(THISDIR)%.c | .deps
+$(THISDIR).objects/%.o $(THISDIR).deps/%.d: $(THISDIR)%.c | .deps .objects
 	$(compile) $(WLD_CPPFLAGS) $(WLD_PACKAGE_CFLAGS)
 
 libwld.a: $(WLD_STATIC_OBJECTS)
@@ -98,7 +97,7 @@ $(foreach dir,LIB PKGCONFIG,$(DESTDIR)$($(dir)DIR)) $(DESTDIR)$(INCLUDEDIR)/wld:
 
 .PHONY: clean
 clean:
-	rm -rf $(CLEAN_FILES)
+	rm -rf $(CLEAN_FILES) .deps .objects
 
 -include $(WLD_STATIC_DEPS)
 

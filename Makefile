@@ -17,7 +17,7 @@ DEBUGFLAGS=-O0 -g -DDEBUG
 endif
 
 SRC = st.c wl.c xdg-shell-protocol.c xdg-decoration-protocol.c $(SIXEL_C) $(LIGATURES_C)
-OBJ = $(SRC:.c=.o)
+OBJ = $(SRC:%.c=.objects/%.o)
 DEP = $(SRC:%.c=.deps/%.d)
 
 all: st-wl
@@ -53,11 +53,11 @@ xdg-decoration-protocol.h:
 
 ifeq ($(if $(V),$(V),0), 0)
     define quiet
-			@echo "  $1 $(notdir $(<:%.c=%.o))"
+			@echo "  $1 $(notdir $(<:%.c=.objects/%.o))"
       @$(if $2,$2,$($1))
     endef
     define quietlink
-			@echo "  $1 $(notdir $@)"
+			@echo "  $1 $@"
       @$(if $2,$2,$($1))
     endef
 else
@@ -69,10 +69,10 @@ else
     endef
 endif
 
-%.o .deps/%.d: %.c | .deps
-	$(call quiet,CC) $(STCFLAGS) -c $< -MMD -MP -MF .deps/$*.d -MT $*.o
+.objects/%.o .deps/%.d: %.c | .deps .objects
+	$(call quiet,CC) $(STCFLAGS) -c $< -o .objects/$*.o -MMD -MP -MF .deps/$*.d -MT .objects/$*.o
 
-wl.o: xdg-shell-client-protocol.h xdg-decoration-protocol.h
+.objects/wl.o: xdg-shell-client-protocol.h xdg-decoration-protocol.h
 
 $(OBJ): config.h config.mk patches.h
 
@@ -82,17 +82,20 @@ $(THISDIR)wld/libwld.a config.h config.mk patches.h: options
 st-wl: $(THISDIR)wld/libwld.a $(OBJ)
 	$(call quietlink,CC) $(STCFLAGS) -o $@ $(OBJ) $(STLDFLAGS)
 
-$(THISDIR)wld/%.o:
+$(THISDIR)wld/.objects/%.o:
 	@rm -f $@
 
 $(THISDIR)wld/libwld.a:
 	@DEBUGFLAGS="$(DEBUGFLAGS)" $(MAKE) -C wld
 
-.deps:
+.deps .objects:
 	@mkdir "$@"
 
 clean:
-	rm -f st-wl $(OBJ) st-wl-$(VERSION).tar.gz xdg-shell-*
+	rm -rf .objects .deps
+	rm -f st-wl st-wl-$(VERSION).tar.gz config.h options patches.h xdg-decoration-* xdg-shell-*
+
+	$(MAKE) -C wld clean
 
 install: st-wl
 	mkdir -p $(DESTDIR)$(PREFIX)/bin
