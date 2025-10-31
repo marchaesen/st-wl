@@ -110,7 +110,7 @@ void wld_font_destroy_context(struct wld_font_context * context);
  * Open a new font from the given fontconfig match.
  */
 struct wld_font * wld_font_open_pattern(struct wld_font_context * context,
-                                        FcPattern * match);
+                                        FcPattern * match, int type, int fontsize);
 
 /**
  * Close a font.

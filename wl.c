@@ -29,6 +29,8 @@ char *argv0;
 #include "xdg-shell-client-protocol.h"
 #include "xdg-decoration-protocol.h"
 
+static char *font = "JetBrainsMono Nerd Font:antialias=true:autohint=true";
+
 #if SIXEL_PATCH
 #include "sixel.h"
 #endif // SIXEL_PATCH
@@ -189,7 +191,7 @@ static void xdgtoplevelclose(void *, struct xdg_toplevel *);
 static void wmping(void *, struct xdg_wm_base *, uint32_t);
 
 static inline uchar sixd_to_8bit(int);
-static int wlloadfont(Font *, FcPattern *);
+static int wlloadfont(Font *, FcPattern *, int type, int fontsize);
 static void wlunloadfont(Font *f);
 static void wlloadfonts(char *, double);
 static void wlunloadfonts(void);
@@ -273,7 +275,7 @@ static Fontcache *frc = NULL;
 static int frclen = 0;
 static int frccap = 0;
 static char *usedfont = NULL;
-static double usedfontsize = 0;
+static double usedfontsize = -1;
 static double defaultfontsize = 0;
 
 #if ALPHA_PATCH
@@ -1164,19 +1166,19 @@ void
 xdgtoplevelconfigure(void *data, struct xdg_toplevel *toplevel,
 		int32_t w, int32_t h, struct wl_array *states)
 {
-  g_fullscreen_state = false;
-  if (states)
-  {
-    uint32_t *state = states->data;
-    for (int i = 0; i < states->size/4; i++)
-    {
-      if (state[i] == XDG_TOPLEVEL_STATE_FULLSCREEN)
-      {
-        g_fullscreen_state = true;
-        break;
-      }
-    }
-  }
+	g_fullscreen_state = false;
+	if (states)
+	{
+		uint32_t *state = states->data;
+		for (int i = 0; i < states->size/4; i++)
+		{
+			if (state[i] == XDG_TOPLEVEL_STATE_FULLSCREEN)
+			{
+				g_fullscreen_state = true;
+				break;
+			}
+		}
+	}
 
 	if (w == win.w && h == win.h)
 		return;
@@ -1249,10 +1251,10 @@ xloadcols(void)
 	#if ALPHA_PATCH
 	/* set alpha value of bg color */
 	if (opt_alpha)
-  {
+	{
 		alpha = strtof(opt_alpha, NULL);
-  }
-  term_alpha = (uint8_t)(alpha*255.0);
+	}
+	term_alpha = (uint8_t)(alpha*255.0);
 	#endif // ALPHA_PATCH
 	loaded = 1;
 }
@@ -1288,33 +1290,38 @@ xsetcolorname(int x, const char *name)
 }
 
 int
-wlloadfont(Font *f, FcPattern *pattern)
+wlloadfont(Font *f, FcPattern *pattern, int type, int fontsize)
 {
-	FcPattern *configured;
-	FcPattern *match;
+	FcPattern *configured=NULL;
+	FcPattern *match=NULL;
 	FcResult result;
 	struct wld_extents extents;
 	int wantattr, haveattr;
 
-	/*
-	 * Manually configure instead of calling XftMatchFont
-	 * so that we can use the configured pattern for
-	 * "missing glyph" lookups.
-	 */
-	configured = FcPatternDuplicate(pattern);
-	if (!configured)
-		return 1;
+	if (pattern)
+	{
+		/*
+		 * Manually configure instead of calling XftMatchFont
+		 * so that we can use the configured pattern for
+		 * "missing glyph" lookups.
+		 */
+		configured = FcPatternDuplicate(pattern);
+		if (!configured)
+			return 1;
 
-	FcConfigSubstitute(NULL, configured, FcMatchPattern);
-	FcDefaultSubstitute(configured);
+		FcConfigSubstitute(NULL, configured, FcMatchPattern);
+		FcDefaultSubstitute(configured);
 
-	match = FcFontMatch(NULL, configured, &result);
-	if (!match) {
-		FcPatternDestroy(configured);
-		return 1;
+		match = FcFontMatch(NULL, configured, &result);
+		if (!match) {
+			FcPatternDestroy(configured);
+			return 1;
+		}
 	}
+	else
+		configured = FcNameParse((FcChar8 *)font);
 
-	if (!(f->match = wld_font_open_pattern(wld.fontctx, match))) {
+	if (!(f->match = wld_font_open_pattern(wld.fontctx, match, type, fontsize))) {
 		FcPatternDestroy(configured);
 		FcPatternDestroy(match);
 		return 1;
@@ -1362,46 +1369,49 @@ wlloadfont(Font *f, FcPattern *pattern)
 void
 wlloadfonts(char *fontstr, double fontsize)
 {
-	FcPattern *pattern;
+	FcPattern *pattern=NULL;
 	double fontval;
 
-	if (fontstr[0] == '-') {
-		/* XXX: need XftXlfdParse equivalent */
-		pattern = NULL;
-	} else {
-		pattern = FcNameParse((FcChar8 *)fontstr);
-	}
-
-	if (!pattern)
-		die("can't open font %s\n", fontstr);
-
-	if (fontsize > 1) {
-		FcPatternDel(pattern, FC_PIXEL_SIZE);
-		FcPatternDel(pattern, FC_SIZE);
-		FcPatternAddDouble(pattern, FC_PIXEL_SIZE, (double)fontsize);
-		usedfontsize = fontsize;
-	} else {
-		if (FcPatternGetDouble(pattern, FC_PIXEL_SIZE, 0, &fontval) ==
-				FcResultMatch) {
-			usedfontsize = fontval;
-		} else if (FcPatternGetDouble(pattern, FC_SIZE, 0, &fontval) ==
-				FcResultMatch) {
-			usedfontsize = -1;
+	if (fontstr)
+	{
+		if (fontstr[0] == '-') {
+			/* XXX: need XftXlfdParse equivalent */
+			pattern = NULL;
 		} else {
-			/*
-			 * Default font size is 12, if none given. This is to
-			 * have a known usedfontsize value.
-			 */
-			FcPatternAddDouble(pattern, FC_PIXEL_SIZE, 12);
-			usedfontsize = 12;
+			pattern = FcNameParse((FcChar8 *)fontstr);
 		}
-		defaultfontsize = usedfontsize;
+
+		if (!pattern)
+			die("can't open font %s\n", fontstr);
+
+		if (fontsize > 1) {
+			FcPatternDel(pattern, FC_PIXEL_SIZE);
+			FcPatternDel(pattern, FC_SIZE);
+			FcPatternAddDouble(pattern, FC_PIXEL_SIZE, (double)fontsize);
+			usedfontsize = fontsize;
+		} else {
+			if (FcPatternGetDouble(pattern, FC_PIXEL_SIZE, 0, &fontval) ==
+					FcResultMatch) {
+				usedfontsize = fontval;
+			} else if (FcPatternGetDouble(pattern, FC_SIZE, 0, &fontval) ==
+					FcResultMatch) {
+				usedfontsize = -1;
+			} else {
+				/*
+				 * Default font size is DEFAULTFONTSIZE, if none given. This is to
+				 * have a known usedfontsize value.
+				 */
+				FcPatternAddDouble(pattern, FC_PIXEL_SIZE, DEFAULTFONTSIZE);
+				usedfontsize = DEFAULTFONTSIZE;
+			}
+			defaultfontsize = usedfontsize;
+		}
+
+		FcConfigSubstitute(0, pattern, FcMatchPattern);
+		FcDefaultSubstitute(pattern);
 	}
 
-	FcConfigSubstitute(0, pattern, FcMatchPattern);
-	FcDefaultSubstitute(pattern);
-
-	if (wlloadfont(&dc.font, pattern))
+	if (wlloadfont(&dc.font, pattern, 0, fontsize))
 		die("can't open font %s\n", fontstr);
 
 	if (usedfontsize < 0) {
@@ -1411,24 +1421,38 @@ wlloadfonts(char *fontstr, double fontsize)
 		if (fontsize == 0)
 			defaultfontsize = fontval;
 	}
+	else
+	{
+		usedfontsize = fontsize;
+		fprintf(stderr, "Changed font size to %f\n", fontsize);
+	}
 
 	/* Setting character width and height. */
 	win.cw = ceilf(dc.font.width * cwscale);
 	win.ch = ceilf(dc.font.height * chscale);
 
-	FcPatternDel(pattern, FC_SLANT);
-	FcPatternAddInteger(pattern, FC_SLANT, FC_SLANT_ITALIC);
-	if (wlloadfont(&dc.ifont, pattern))
+	if (pattern)
+	{
+		FcPatternDel(pattern, FC_SLANT);
+		FcPatternAddInteger(pattern, FC_SLANT, FC_SLANT_ITALIC);
+	}
+	if (wlloadfont(&dc.ifont, pattern, 1, fontsize))
 		die("can't open font %s\n", fontstr);
 
-	FcPatternDel(pattern, FC_WEIGHT);
-	FcPatternAddInteger(pattern, FC_WEIGHT, FC_WEIGHT_BOLD);
-	if (wlloadfont(&dc.ibfont, pattern))
+	if (pattern)
+	{
+		FcPatternDel(pattern, FC_WEIGHT);
+		FcPatternAddInteger(pattern, FC_WEIGHT, FC_WEIGHT_BOLD);
+	}
+	if (wlloadfont(&dc.ibfont, pattern, 3, fontsize))
 		die("can't open font %s\n", fontstr);
 
-	FcPatternDel(pattern, FC_SLANT);
-	FcPatternAddInteger(pattern, FC_SLANT, FC_SLANT_ROMAN);
-	if (wlloadfont(&dc.bfont, pattern))
+	if (pattern)
+	{
+		FcPatternDel(pattern, FC_SLANT);
+		FcPatternAddInteger(pattern, FC_SLANT, FC_SLANT_ROMAN);
+	}
+	if (wlloadfont(&dc.bfont, pattern, 2, fontsize))
 		die("can't open font %s\n", fontstr);
 
 	FcPatternDestroy(pattern);
@@ -1480,36 +1504,25 @@ xstartdraw(void)
 void
 xdrawline(Line line, int x1, int y, int x2)
 {
-	int ic, ib, x, ox;
-	Glyph base, new;
-	char buf[DRAW_BUF_SIZ];
-
-	base = line[0];
-	ic = ib = ox = 0;
-	for (x = x1; x < x2; x++) {
-		new = line[x];
+	// Go from the end to the beginning to avoid parts of characters that are to wide to be overwritten
+	for (int x = x2; x > x1;) {
+		x--;
+		Glyph new = line[x];
 		if (new.mode == ATTR_WDUMMY)
 			continue;
 		if (selected(x, y))
+		{
 			#if SELECTION_COLORS_PATCH
 			new.mode |= ATTR_SELECTED;
 			#else
 			new.mode ^= ATTR_REVERSE;
 			#endif // SELECTION_COLORS_PATCH
-		if (ib > 0 && (ATTRCMP(base, new) || ib >= DRAW_BUF_SIZ-UTF_SIZ)) {
-			wldraws(buf, base, ox, y, ic, ib);
-			ic = ib = 0;
-		}
-		if (ib == 0) {
-			ox = x;
-			base = new;
 		}
 
-		ib += utf8encode(new.u, buf+ib);
-		ic += (new.mode & ATTR_WIDE)? 2 : 1;
+		char buf[UTF_SIZ];
+		int ib = utf8encode(new.u, buf);
+		wldraws(buf, new, x, y, (new.mode & ATTR_WIDE)? 2 : 1, ib);
 	}
-	if (ib > 0)
-		wldraws(buf, base, ox, y, ic, ib);
 
 	#if ANYSIZE_PATCH
 	wl_surface_damage(wl.surface, 0, win.vborderpx + y * win.ch, win.w, win.ch);
@@ -1850,6 +1863,7 @@ wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
 
 		/* Nothing was found. */
 		if (i >= frclen) {
+			fprintf(stderr, "Missing for unicode character %x\n", unicodep);
 			if (!font->set)
 				font->set = FcFontSort(0, font->pattern,
 						1, 0, &fcres);
@@ -1886,7 +1900,7 @@ wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
 			}
 
 			frc[frclen].font = wld_font_open_pattern(wld.fontctx,
-					fontpattern);
+					fontpattern, 0, usedfontsize);
 			frc[frclen].flags = frcflags;
 			frc[frclen].unicodep = unicodep;
 
@@ -2338,9 +2352,9 @@ wlinit(int cols, int rows)
 	if (!FcInit())
 		die("Could not init fontconfig.\n");
 
-	usedfont = (opt_font == NULL)? font : opt_font;
+	usedfont = opt_font;
 	wld.fontctx = wld_font_create_context();
-	wlloadfonts(usedfont, 0);
+	wlloadfonts(usedfont, DEFAULTFONTSIZE);
 
 	xloadcols();
 	wlloadcursor();
