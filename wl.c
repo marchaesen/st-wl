@@ -190,16 +190,8 @@ static void xdgtoplevelconfigure(void *, struct xdg_toplevel *,
 static void xdgtoplevelclose(void *, struct xdg_toplevel *);
 static void wmping(void *, struct xdg_wm_base *, uint32_t);
 
-static inline uchar sixd_to_8bit(int);
-static int wlloadfont(Font *, FcPattern *, int type, int fontsize);
-static void wlunloadfont(Font *f);
 static void wlloadfonts(char *, double);
 static void wlunloadfonts(void);
-
-static void wlclear(int, int, int, int);
-static void wldraws(char *, Glyph, int, int, int, int);
-static void wldrawglyph(Glyph, int, int);
-static void wlloadcursor(void);
 
 static void regglobal(void *, struct wl_registry *, uint32_t, const char *,
 		uint32_t);
@@ -1188,8 +1180,7 @@ xdgtoplevelconfigure(void *data, struct xdg_toplevel *toplevel,
 		wl.configured = true;
 }
 
-void
-xdgtoplevelclose(void *data, struct xdg_toplevel *toplevel)
+static void xdgtoplevelclose(void *data, struct xdg_toplevel *toplevel)
 {
 	/* Send SIGHUP to shell */
 	pid_t thispid = getpid();
@@ -1197,20 +1188,17 @@ xdgtoplevelclose(void *data, struct xdg_toplevel *toplevel)
 	exit(0);
 }
 
-void
-wmping(void *data, struct xdg_wm_base *wm, uint32_t serial)
+static void wmping(void *data, struct xdg_wm_base *wm, uint32_t serial)
 {
 	xdg_wm_base_pong(wm, serial);
 }
 
-uchar
-sixd_to_8bit(int x)
+static inline uchar sixd_to_8bit(int x)
 {
 	return x == 0 ? 0 : 0x37 + 0x28 * x;
 }
 
-int
-wlloadcolor(int i, const char *name, uint32_t *color)
+static int wlloadcolor(int i, const char *name, uint32_t *color)
 {
 	if (!name) {
 		if (BETWEEN(i, 16, 255)) { /* 256 color */
@@ -1229,8 +1217,7 @@ wlloadcolor(int i, const char *name, uint32_t *color)
 	return wld_lookup_named_color(name, color);
 }
 
-void
-xloadcols(void)
+void xloadcols(void)
 {
 	int i;
 	static int loaded;
@@ -1259,8 +1246,7 @@ xloadcols(void)
 	loaded = 1;
 }
 
-int
-xgetcolor(int x, unsigned char *r, unsigned char *g, unsigned char *b)
+int xgetcolor(int x, unsigned char *r, unsigned char *g, unsigned char *b)
 {
 	if (!BETWEEN(x, 0, dc.collen))
 		return 1;
@@ -1272,8 +1258,7 @@ xgetcolor(int x, unsigned char *r, unsigned char *g, unsigned char *b)
 	return 0;
 }
 
-int
-xsetcolorname(int x, const char *name)
+int xsetcolorname(int x, const char *name)
 {
 	uint32_t color;
 
@@ -1289,8 +1274,7 @@ xsetcolorname(int x, const char *name)
 	return 0;
 }
 
-int
-wlloadfont(Font *f, FcPattern *pattern, int type, int fontsize)
+static int wlloadfont(Font *f, FcPattern *pattern, int type, int fontsize)
 {
 	FcPattern *configured=NULL;
 	FcPattern *match=NULL;
@@ -1366,8 +1350,7 @@ wlloadfont(Font *f, FcPattern *pattern, int type, int fontsize)
 	return 0;
 }
 
-void
-wlloadfonts(char *fontstr, double fontsize)
+static void wlloadfonts(char *fontstr, double fontsize)
 {
 	FcPattern *pattern=NULL;
 	double fontval;
@@ -1458,8 +1441,7 @@ wlloadfonts(char *fontstr, double fontsize)
 	FcPatternDestroy(pattern);
 }
 
-void
-wlunloadfont(Font *f)
+static void wlunloadfont(Font *f)
 {
 	wld_font_close(f->match);
 	FcPatternDestroy(f->pattern);
@@ -1467,8 +1449,7 @@ wlunloadfont(Font *f)
 		FcFontSetDestroy(f->set);
 }
 
-void
-wlunloadfonts(void)
+static void wlunloadfonts(void)
 {
 	/* Free the loaded fonts in the font cache.  */
 	while (frclen > 0)
@@ -1486,6 +1467,16 @@ wlneeddraw(void)
 	wl.needdraw = true;
 }
 
+/*
+ * Absolute coordinates.
+ */
+static void wlclear(int x1, int y1, int x2, int y2)
+{
+	uint32_t color = dc.col[IS_SET(MODE_REVERSE) ? defaultfg : defaultbg];
+	color = (color & term_alpha << 24) | (color & 0x00FFFFFF);
+	wld_fill_rectangle(wld.renderer, color, x1, y1, x2 - x1, y2 - y1);
+}
+
 int
 xstartdraw(void)
 {
@@ -1499,36 +1490,6 @@ xstartdraw(void)
 		}
 	}
 	return IS_SET(MODE_VISIBLE);
-}
-
-void
-xdrawline(Line line, int x1, int y, int x2)
-{
-	// Go from the end to the beginning to avoid parts of characters that are to wide to be overwritten
-	for (int x = x2; x > x1;) {
-		x--;
-		Glyph new = line[x];
-		if (new.mode == ATTR_WDUMMY)
-			continue;
-		if (selected(x, y))
-		{
-			#if SELECTION_COLORS_PATCH
-			new.mode |= ATTR_SELECTED;
-			#else
-			new.mode ^= ATTR_REVERSE;
-			#endif // SELECTION_COLORS_PATCH
-		}
-
-		char buf[UTF_SIZ];
-		int ib = utf8encode(new.u, buf);
-		wldraws(buf, new, x, y, (new.mode & ATTR_WIDE)? 2 : 1, ib);
-	}
-
-	#if ANYSIZE_PATCH
-	wl_surface_damage(wl.surface, 0, win.vborderpx + y * win.ch, win.w, win.ch);
-	#else
-	wl_surface_damage(wl.surface, 0, borderpx + y * win.ch, win.w, win.ch);
-	#endif
 }
 
 void
@@ -1621,161 +1582,148 @@ void wltermclear(int col1, int row1, int col2, int row2)
 	#endif
 }
 
-/*
- * Absolute coordinates.
- */
-void
-wlclear(int x1, int y1, int x2, int y2)
+static void wldrawCharacter(Glyph g, int x, int y)
 {
-	uint32_t color = dc.col[IS_SET(MODE_REVERSE) ? defaultfg : defaultbg];
-	color = (color & term_alpha << 24) | (color & 0x00FFFFFF);
-	wld_fill_rectangle(wld.renderer, color, x1, y1, x2 - x1, y2 - y1);
-}
+	Font *font;
+	uint32_t fg;
+  uint32_t bg;
 
-/*
- * TODO: Implement something like XftDrawGlyphFontSpec in wld, and then apply a
- * similar patch to ae1923d27533ff46400d93765e971558201ca1ee
- */
+	static Font *prev_font;
+	static uint32_t prev_mode=-1;
+	static uint32_t prev_fg=-1;
+	static uint32_t prev_bg=-1;
 
-void
-wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
-{
-	#if ANYSIZE_PATCH
-	int winx = win.hborderpx + x * win.cw, winy = win.vborderpx + y * win.ch,
-	    width = charlen * win.cw, xp, i;
-	#else
-	int winx = borderpx + x * win.cw, winy = borderpx + y * win.ch,
-	    width = charlen * win.cw, xp, i;
-	#endif // ANYSIZE_PATCH
-	int frcflags, charexists;
-	int u8fl, u8fblen, u8cblen, doesexist;
-	char *u8c, *u8fs;
-	Rune unicodep;
-	Font *font = &dc.font;
-	FcResult fcres;
-	FcPattern *fcpattern, *fontpattern;
-	FcFontSet *fcsets[] = { NULL };
-	FcCharSet *fccharset;
-	uint32_t fg, bg, temp;
-	int oneatatime;
-
-	frcflags = FRC_NORMAL;
-
-	/* Fallback on color display for attributes not supported by the font */
-	if (base.mode & ATTR_ITALIC && base.mode & ATTR_BOLD) {
-		if (dc.ibfont.badslant || dc.ibfont.badweight)
-			base.fg = defaultattr;
-		font = &dc.ibfont;
-		frcflags = FRC_ITALICBOLD;
-	} else if (base.mode & ATTR_ITALIC) {
-		if (dc.ifont.badslant)
-			base.fg = defaultattr;
-		font = &dc.ifont;
-		frcflags = FRC_ITALIC;
-	} else if (base.mode & ATTR_BOLD) {
-		if (dc.bfont.badweight)
-			base.fg = defaultattr;
-		font = &dc.ifont;
-		frcflags = FRC_BOLD;
+	if (g.mode==prev_mode && g.fg==prev_fg && g.bg==prev_bg)
+	{
+		fg=prev_fg;
+		bg=prev_bg;
+		font=prev_font;
 	}
-
-	if (IS_TRUECOL(base.fg)) {
-		#if SELECTION_COLORS_PATCH
-		if ((base.mode & ATTR_SELECTED))
-			fg = dc.col[selectionfg] | 0xff000000;
-		else
-		#endif // SELECTION_COLORS_PATCH
-			fg = base.fg | 0xff000000;
-	} else {
-		#if SELECTION_COLORS_PATCH
-		if ((base.mode & ATTR_SELECTED))
-			fg = dc.col[selectionfg];
-		else
-		#endif // SELECTION_COLORS_PATCH
-			fg = dc.col[base.fg];
-	}
-
-	if (IS_TRUECOL(base.bg)) {
-		#if SELECTION_COLORS_PATCH
-		if (base.mode & ATTR_SELECTED)
-			bg = dc.col[selectionbg] | 0xff000000;
-		else
-		#endif // SELECTION_COLORS_PATCH
-			bg = base.bg | 0xff000000;
-	} else {
-		#if SELECTION_COLORS_PATCH
-		if (base.mode & ATTR_SELECTED)
-			bg = dc.col[selectionbg];
-		else
-		#endif // SELECTION_COLORS_PATCH
-			bg = dc.col[base.bg];
-	}
-
-	if (base.mode & ATTR_BOLD) {
-		/*
-		 * change basic system colors [0-7]
-		 * to bright system colors [8-15]
-		 */
-	  #if SELECTION_COLORS_PATCH
-		if (BETWEEN(selectionfg, 0, 7) && !(base.mode & ATTR_FAINT))
-			fg = dc.col[selectionfg + 8];
-		#else
-		if (BETWEEN(base.fg, 0, 7) && !(base.mode & ATTR_FAINT))
-			fg = dc.col[base.fg + 8];
-		#endif // SELECTION_COLORS_PATCH
-
-		if (base.mode & ATTR_ITALIC) {
+  else
+	{
+		/* Fallback on color display for attributes not supported by the font */
+		if ((g.mode & (ATTR_ITALIC|ATTR_BOLD)) == (ATTR_ITALIC|ATTR_BOLD)) {
+			if (dc.ibfont.badslant || dc.ibfont.badweight)
+				g.fg = defaultattr;
 			font = &dc.ibfont;
-			frcflags = FRC_ITALICBOLD;
-		} else {
+		} else if (g.mode & ATTR_ITALIC) {
+			if (dc.ifont.badslant)
+				g.fg = defaultattr;
+			font = &dc.ifont;
+		} else if (g.mode & ATTR_BOLD) {
+			if (dc.bfont.badweight)
+				g.fg = defaultattr;
 			font = &dc.bfont;
-			frcflags = FRC_BOLD;
-		}
-	}
-
-	if (IS_SET(MODE_REVERSE)) {
-		if (fg == dc.col[defaultfg]) {
-			fg = dc.col[defaultbg];
 		} else {
-			fg = ~(fg & 0xffffff);
+			font = &dc.font;
 		}
 
-		if (bg == dc.col[defaultbg]) {
-			bg = dc.col[defaultfg];
+		if (IS_TRUECOL(g.fg)) {
+#if SELECTION_COLORS_PATCH
+			if ((g.mode & ATTR_SELECTED))
+				fg = dc.col[selectionfg] | 0xff000000;
+			else
+#endif // SELECTION_COLORS_PATCH
+				fg = g.fg | 0xff000000;
 		} else {
-			bg = ~(bg & 0xffffff);
+#if SELECTION_COLORS_PATCH
+			if ((g.mode & ATTR_SELECTED))
+				fg = dc.col[selectionfg];
+			else
+#endif // SELECTION_COLORS_PATCH
+				fg = dc.col[g.fg];
 		}
-	}
 
-	if (base.mode & ATTR_REVERSE) {
-		#if SPOILER_PATCH
-		if (bg == fg) {
-			bg = dc.col[defaultfg];
-			fg = dc.col[defaultbg];
+		if (IS_TRUECOL(g.bg)) {
+#if SELECTION_COLORS_PATCH
+			if (g.mode & ATTR_SELECTED)
+				bg = dc.col[selectionbg] | 0xff000000;
+			else
+#endif // SELECTION_COLORS_PATCH
+				bg = g.bg | 0xff000000;
 		} else {
-			temp = fg;
+#if SELECTION_COLORS_PATCH
+			if (g.mode & ATTR_SELECTED)
+				bg = dc.col[selectionbg];
+			else
+#endif // SELECTION_COLORS_PATCH
+				bg = dc.col[g.bg];
+		}
+
+		if (g.mode & ATTR_BOLD) {
+			/*
+			 * change basic system colors [0-7]
+			 * to bright system colors [8-15]
+			 */
+#if SELECTION_COLORS_PATCH
+			if (BETWEEN(selectionfg, 0, 7) && !(g.mode & ATTR_FAINT))
+				fg = dc.col[selectionfg + 8];
+#else
+			if (BETWEEN(g.fg, 0, 7) && !(g.mode & ATTR_FAINT))
+				fg = dc.col[g.fg + 8];
+#endif // SELECTION_COLORS_PATCH
+		}
+
+		if (IS_SET(MODE_REVERSE)) {
+			if (fg == dc.col[defaultfg]) {
+				fg = dc.col[defaultbg];
+			} else {
+				fg = ~(fg & 0xffffff);
+			}
+
+			if (bg == dc.col[defaultbg]) {
+				bg = dc.col[defaultfg];
+			} else {
+				bg = ~(bg & 0xffffff);
+			}
+		}
+
+		if (g.mode & ATTR_REVERSE) {
+#if SPOILER_PATCH
+			if (bg == fg) {
+				bg = dc.col[defaultfg];
+				fg = dc.col[defaultbg];
+			} else {
+				uint32_t temp = fg;
+				fg = bg;
+				bg = temp;
+			}
+#else
+			uint32_t temp = fg;
 			fg = bg;
 			bg = temp;
+#endif // SPOILER_PATCH
 		}
-		#else
-		temp = fg;
-		fg = bg;
-		bg = temp;
-		#endif // SPOILER_PATCH
+
+		if (g.mode & ATTR_FAINT && !(g.mode & ATTR_BOLD)) {
+			fg = (fg & (0xff << 24))
+				| ((((fg >> 16) & 0xff) / 2) << 16)
+				| ((((fg >> 8) & 0xff) / 2) << 8)
+				| ((fg & 0xff) / 2);
+		}
+
+		if (g.mode & ATTR_BLINK && win.mode & MODE_BLINK)
+			fg = bg;
+
+		if (g.mode & ATTR_INVISIBLE)
+			fg = bg;
+
+		prev_mode=g.mode;
+		prev_fg=fg;
+		prev_bg=fg;
+		prev_font=font;
 	}
 
-	if (base.mode & ATTR_FAINT && !(base.mode & ATTR_BOLD)) {
-		fg = (fg & (0xff << 24))
-			| ((((fg >> 16) & 0xff) / 2) << 16)
-			| ((((fg >> 8) & 0xff) / 2) << 8)
-			| ((fg & 0xff) / 2);
-	}
-
-	if (base.mode & ATTR_BLINK && win.mode & MODE_BLINK)
-		fg = bg;
-
-	if (base.mode & ATTR_INVISIBLE)
-		fg = bg;
+	int charlen = g.mode & ATTR_WIDE ? 2 : 1;
+	#if ANYSIZE_PATCH
+	int winx = win.hborderpx + x * win.cw;
+  int winy = win.vborderpx + y * win.ch;
+	int width = charlen * win.cw;
+	#else
+	int winx = borderpx + x * win.cw;
+  int winy = borderpx + y * win.ch;
+	int width = charlen * win.cw;
+	#endif // ANYSIZE_PATCH
 
 	/* Intelligent cleaning up of the borders. */
 	#if ANYSIZE_PATCH
@@ -1808,55 +1756,46 @@ wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
 	/* Clean up the region we want to draw to. */
 	wld_fill_rectangle(wld.renderer, (bg & (term_alpha << 24)) | (bg & 0x00FFFFFF), winx, winy, width, win.ch);
 
-	for (xp = winx; bytelen > 0;) {
-		/*
-		 * Search for the range in the to be printed string of glyphs
-		 * that are in the main font. Then print that range. If
-		 * some glyph is found that is not in the font, do the
-		 * fallback dance.
-		 */
-		u8fs = s;
-		u8fblen = 0;
-		u8fl = 0;
-		oneatatime = font->width != win.cw;
-		for (;;) {
-			u8c = s;
-			u8cblen = utf8decode(s, &unicodep, UTF_SIZ);
-			s += u8cblen;
-			bytelen -= u8cblen;
+	/*
+	 * Search for the range in the to be printed string of glyphs
+	 * that are in the main font. Then print that range. If
+	 * some glyph is found that is not in the font, do the
+	 * fallback dance.
+	 */
+	char s[UTF_SIZ];
+	utf8encode(g.u, s);
+	Rune unicodep;
+	int u8cblen = utf8decode(s, &unicodep, UTF_SIZ);
 
-			doesexist = wld_font_ensure_char(font->match, unicodep);
-			if (doesexist) {
-				u8fl++;
-				u8fblen += u8cblen;
-				if (!oneatatime && bytelen > 0)
-					continue;
-			}
-
-			if (u8fl > 0) {
-				wld_draw_text(wld.renderer,
-						font->match, fg, xp,
-						winy + font->ascent,
-						u8fs, u8fblen, NULL);
-				xp += win.cw * u8fl;
-			}
-			break;
-		}
-		if (doesexist) {
-			if (oneatatime)
-				continue;
-			break;
+	if (wld_font_ensure_char(font->match, unicodep)) {
+		wld_draw_text(wld.renderer,
+				font->match, fg, winx,
+				winy + font->ascent,
+				s, u8cblen, NULL);
+	}
+	else
+	{
+		/* Fallback on color display for attributes not supported by the font */
+		int frcflags;
+		if ((g.mode & (ATTR_ITALIC|ATTR_BOLD)) == (ATTR_ITALIC|ATTR_BOLD)) {
+			frcflags = FRC_ITALICBOLD;
+		} else if (g.mode & ATTR_ITALIC) {
+			frcflags = FRC_ITALIC;
+		} else if (g.mode & ATTR_BOLD) {
+			frcflags = FRC_BOLD;
+		} else {
+			frcflags = FRC_NORMAL;
 		}
 
 		/* Search the font cache. */
-		for (i = 0; i < frclen; i++) {
-			charexists = wld_font_ensure_char(frc[i].font, unicodep);
+		int i=0;
+		for (; i < frclen; i++) {
+			bool charexists = wld_font_ensure_char(frc[i].font, unicodep);
 			/* Everything correct. */
 			if (charexists && frc[i].flags == frcflags)
 				break;
 			/* We got a default font for a not found glyph. */
-			if (!charexists && frc[i].flags == frcflags \
-					&& frc[i].unicodep == unicodep) {
+			if (!charexists && frc[i].flags == frcflags && frc[i].unicodep == unicodep) {
 				break;
 			}
 		}
@@ -1864,10 +1803,10 @@ wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
 		/* Nothing was found. */
 		if (i >= frclen) {
 			fprintf(stderr, "Missing for unicode character %x\n", unicodep);
+      FcResult fcres;
 			if (!font->set)
-				font->set = FcFontSort(0, font->pattern,
-						1, 0, &fcres);
-			fcsets[0] = font->set;
+				font->set = FcFontSort(0, font->pattern, 1, 0, &fcres);
+	    FcFontSet *fcsets[] = { font->set };
 
 			/*
 			 * Nothing was found in the cache. Now use
@@ -1876,20 +1815,18 @@ wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
 			 *
 			 * Xft and fontconfig are design failures.
 			 */
-			fcpattern = FcPatternDuplicate(font->pattern);
-			fccharset = FcCharSetCreate();
+			FcPattern *fcpattern = FcPatternDuplicate(font->pattern);
+			FcCharSet *fccharset = FcCharSetCreate();
 
 			FcCharSetAddChar(fccharset, unicodep);
-			FcPatternAddCharSet(fcpattern, FC_CHARSET,
-					fccharset);
+			FcPatternAddCharSet(fcpattern, FC_CHARSET, fccharset);
 			FcPatternAddBool(fcpattern, FC_SCALABLE, 1);
 
 			FcConfigSubstitute(0, fcpattern,
 					FcMatchPattern);
 			FcDefaultSubstitute(fcpattern);
 
-			fontpattern = FcFontSetMatch(0, fcsets, 1,
-					fcpattern, &fcres);
+			FcPattern *fontpattern = FcFontSetMatch(0, fcsets, 1,	fcpattern, &fcres);
 
 			/*
 			 * Overwrite or create the new cache entry.
@@ -1899,8 +1836,7 @@ wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
 				frc = xrealloc(frc, frccap * sizeof(Fontcache));
 			}
 
-			frc[frclen].font = wld_font_open_pattern(wld.fontctx,
-					fontpattern, 0, usedfontsize);
+			frc[frclen].font = wld_font_open_pattern(wld.fontctx,	fontpattern, 0, usedfontsize);
 			frc[frclen].flags = frcflags;
 			frc[frclen].unicodep = unicodep;
 
@@ -1912,20 +1848,16 @@ wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
 		}
 
 		wld_draw_text(wld.renderer, frc[i].font, fg,
-				xp, winy + frc[i].font->ascent,
-				u8c, u8cblen, NULL);
-
-		xp += win.cw * wcwidth(unicodep);
+				winx, winy + frc[i].font->ascent,
+				s, u8cblen, NULL);
 	}
 
-	if (base.mode & ATTR_UNDERLINE) {
-		wld_fill_rectangle(wld.renderer, fg, winx, winy + font->ascent + 1,
-				width, 1);
+	if (g.mode & ATTR_UNDERLINE) {
+		wld_fill_rectangle(wld.renderer, fg, winx, winy + font->ascent + 1,	width, 1);
 	}
 
-	if (base.mode & ATTR_STRUCK) {
-		wld_fill_rectangle(wld.renderer, fg, winx, winy + 2 * font->ascent / 3,
-				width, 1);
+	if (g.mode & ATTR_STRUCK) {
+		wld_fill_rectangle(wld.renderer, fg, winx, winy + 2 * font->ascent / 3,	width, 1);
 	}
 
 	#if OPENURLONCLICK_PATCH
@@ -1952,20 +1884,40 @@ wldraws(char *s, Glyph base, int x, int y, int charlen, int bytelen)
 	#endif // OPENURLONCLICK_PATCH
 }
 
-void
-wldrawglyph(Glyph g, int x, int y)
+void xdrawline(Line line, int x1, int y, int x2)
 {
-	static char buf[UTF_SIZ];
-	size_t len = utf8encode(g.u, buf);
-	int width = g.mode & ATTR_WIDE ? 2 : 1;
+	// Go from the end to the beginning to avoid parts of characters that are to wide to be overwritten
+	for (int x = x2; x > x1;) {
+		x--;
+		Glyph new = line[x];
+		if (new.mode == ATTR_WDUMMY)
+			continue;
+		if (selected(x, y))
+		{
+			#if SELECTION_COLORS_PATCH
+			new.mode |= ATTR_SELECTED;
+			#else
+			new.mode ^= ATTR_REVERSE;
+			#endif // SELECTION_COLORS_PATCH
+		}
 
-	g.mode &= ~ATTR_REVERSE; // This function is only used for the cursor, so the reverse attribute is not needed (otherwise the cursor stops blinking in certain cases)
+		wldrawCharacter(new, x, y);
+	}
 
-	wldraws(buf, g, x, y, width, len);
+	#if ANYSIZE_PATCH
+	wl_surface_damage(wl.surface, 0, win.vborderpx + y * win.ch, win.w, win.ch);
+	#else
+	wl_surface_damage(wl.surface, 0, borderpx + y * win.ch, win.w, win.ch);
+	#endif
 }
 
-void
-wlloadcursor(void)
+static void wldrawglyph(Glyph g, int x, int y)
+{
+	g.mode &= ~ATTR_REVERSE; // This function is only used for the cursor, so the reverse attribute is not needed (otherwise the cursor stops blinking in certain cases)
+	wldrawCharacter(g, x, y);
+}
+
+static void wlloadcursor(void)
 {
 	char *names[] = { mouseshape, "xterm", "ibeam", "text" };
 	int i;
@@ -1978,8 +1930,7 @@ wlloadcursor(void)
 	cursor.surface = wl_compositor_create_surface(wl.cmp);
 }
 
-void
-xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
+void xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 {
 	uint32_t drawcol;
 
