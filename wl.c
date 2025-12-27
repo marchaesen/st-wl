@@ -1020,7 +1020,6 @@ void
 zoom(const Arg *arg)
 {
 	Arg larg;
-
 	larg.f = usedfontsize + arg->f;
 	#if SIXEL_PATCH
 	if (larg.f >= 1.0)
@@ -1397,17 +1396,9 @@ static void wlloadfonts(char *fontstr, double fontsize)
 	if (wlloadfont(&dc.font, pattern, 0, fontsize))
 		die("can't open font %s\n", fontstr);
 
+	usedfontsize = fontsize;
 	if (usedfontsize < 0) {
-		FcPatternGetDouble(dc.font.pattern,
-				FC_PIXEL_SIZE, 0, &fontval);
-		usedfontsize = fontval;
-		if (fontsize == 0)
-			defaultfontsize = fontval;
-	}
-	else
-	{
-		usedfontsize = fontsize;
-		fprintf(stderr, "Changed font size to %f\n", fontsize);
+		defaultfontsize = fontsize;
 	}
 
 	/* Setting character width and height. */
