@@ -1054,6 +1054,7 @@ zoomabs(const Arg *arg)
 	}
 	#endif // SIXEL_PATCH
 
+	wl_surface_damage(wl.surface, 0, 0, win.w, win.h);
 	cresize(0, 0);
 	redraw();
 	/* XXX: Should the window size be updated here because wayland doesn't
