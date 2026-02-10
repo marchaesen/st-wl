@@ -29,7 +29,7 @@ char *argv0;
 #include "xdg-shell-client-protocol.h"
 #include "xdg-decoration-protocol.h"
 
-static char *font = "JetBrainsMono Nerd Font:antialias=true:autohint=true";
+static char *font = "JetBrainsMono Nerd Font:antialias=true:hintstyle=hintfull";
 
 #if SIXEL_PATCH
 #include "sixel.h"
