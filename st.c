@@ -268,6 +268,31 @@ static const Rune utfmax[UTF_SIZ + 1] = {0x10FFFF, 0x7F, 0x7FF, 0xFFFF, 0x10FFFF
 
 #include "patch/st_include.h"
 
+#if SCROLLBACK_PATCH || REFLOW_PATCH
+/*
+ * Ensure history line at index idx is allocated.
+ * Allocates an entire page of HIST_PAGESIZE lines at once for performance.
+ */
+static void
+histensure(int idx)
+{
+	int page_start, page_end, i;
+
+	if (term.hist[idx])
+		return;
+
+	page_start = (idx / HIST_PAGESIZE) * HIST_PAGESIZE;
+	page_end = page_start + HIST_PAGESIZE;
+	if (page_end > HISTSIZE)
+		page_end = HISTSIZE;
+
+	for (i = page_start; i < page_end; i++) {
+		if (!term.hist[i])
+			term.hist[i] = xmalloc(term.col * sizeof(Glyph));
+	}
+}
+#endif // SCROLLBACK_PATCH || REFLOW_PATCH
+
 ssize_t
 xwrite(int fd, const char *s, size_t len)
 {
@@ -1379,6 +1404,7 @@ tscrollup(int orig, int n)
 	if (copyhist && !IS_SET(MODE_ALTSCREEN)) {
 		for (i = 0; i < n; i++) {
 			term.histi = (term.histi + 1) % HISTSIZE;
+			histensure(term.histi);
 			temp = term.hist[term.histi];
 			term.hist[term.histi] = term.line[orig+i];
 			term.line[orig+i] = temp;
@@ -2347,8 +2373,10 @@ csihandle(void)
 				term.histn = 0;
 				Glyph g=(Glyph){.bg=term.c.attr.bg, .fg=term.c.attr.fg, .u=' ', .mode=0};
 				for (int i = 0; i < HISTSIZE; i++) {
-					for (int j = 0; j < maxcol; j++)
-						term.hist[i][j] = g;
+					if (term.hist[i]) {
+						for (int j = 0; j < maxcol; j++)
+							term.hist[i][j] = g;
+					}
 				}
 			}
 			#endif // SCROLLBACK_PATCH
@@ -3746,9 +3774,11 @@ tresize(int col, int row)
 	#if SCROLLBACK_PATCH
 	Glyph gc=(Glyph){.bg=term.c.attr.bg, .fg=term.c.attr.fg, .u=' ', .mode=0};
 	for (i = 0; i < HISTSIZE; i++) {
-		term.hist[i] = xrealloc(term.hist[i], col * sizeof(Glyph));
-		for (j = mincol; j < col; j++)
-			term.hist[i][j] = gc;
+		if (term.hist[i]) {
+			term.hist[i] = xrealloc(term.hist[i], col * sizeof(Glyph));
+			for (j = mincol; j < col; j++)
+				term.hist[i][j] = gc;
+		}
 	}
 	#endif // SCROLLBACK_PATCH
 
