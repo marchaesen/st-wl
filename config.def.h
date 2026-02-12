@@ -48,7 +48,7 @@ static char *url_opener = "xdg-open";
  * 4: value of shell in /etc/passwd
  * 5: value of shell in config.h
  */
-static char *shell = "/usr/bin/zsh";
+static char *shell = "/bin/sh";
 char *utmp = NULL;
 /* scroll program: to enable use a string like "scroll" */
 char *scroll = NULL;
@@ -89,7 +89,8 @@ static unsigned int tripleclicktimeout = 600;
 /* alt screens */
 int allowaltscreen = 1;
 
-/* key repeat timeouts (in milliseconds) */
+/* key repeat timeouts (in milliseconds)
+ * Overridden at runtime by compositor via wl_keyboard::repeat_info */
 static unsigned int keyrepeatdelay = 500;
 static unsigned int keyrepeatinterval = 25;
 
@@ -151,7 +152,7 @@ const int boxdraw_braille = 0;
 static int bellvolume = 0;
 
 /* default TERM value */
-char *termname = "st-wl-256color";
+char *termname = "st-256color";
 
 /* default class */
 char *termclass = "terminal";
@@ -322,8 +323,8 @@ static Axiskey ashortcuts[] = {
 	{ ControlMask,          Button2, selopen,        {.i = 0},      1 },
 	#endif // OPEN_SELECTED_TEXT_PATCH
 	#if SCROLLBACK_MOUSE_PATCH
-	{ MOD_MASK_SHIFT, AXIS_VERTICAL, +1, kscrollup   , {.i = 1}, S_PRI},
-	{ MOD_MASK_SHIFT, AXIS_VERTICAL, -1, kscrolldown , {.i = 1}, S_PRI},
+	{ MOD_MASK_SHIFT, AXIS_VERTICAL, +1, kscrolldown , {.i = 3}, S_PRI},
+	{ MOD_MASK_SHIFT, AXIS_VERTICAL, -1, kscrollup   , {.i = 3}, S_PRI},
 	#elif UNIVERSCROLL_PATCH
 	{ MOD_MASK_ANY, AXIS_VERTICAL,   +1, ttysend, {.s = "\033[5;2~"}, S_PRI},
 	{ MOD_MASK_ANY, AXIS_VERTICAL,   -1, ttysend, {.s = "\033[6;2~"}, S_PRI},
@@ -332,8 +333,8 @@ static Axiskey ashortcuts[] = {
 	{ MOD_MASK_SHIFT, AXIS_VERTICAL, -1, ttysend, {.s = "\033[6;2~"} },
 	#endif // SCROLLBACK_MOUSE_PATCH
 	#if SCROLLBACK_MOUSE_ALTSCREEN_PATCH || REFLOW_PATCH
-	{ MOD_MASK_ANY, AXIS_VERTICAL,   +1, kscrollup,   {.i = 1}, S_PRI},
-	{ MOD_MASK_ANY, AXIS_VERTICAL,   -1, kscrolldown, {.i = 1}, S_PRI},
+	{ MOD_MASK_ANY, AXIS_VERTICAL,   +1, kscrolldown, {.i = 3}, S_PRI},
+	{ MOD_MASK_ANY, AXIS_VERTICAL,   -1, kscrollup,   {.i = 3}, S_PRI},
 	{ MOD_MASK_ANY, AXIS_VERTICAL,   +1, ttysend, {.s = "\031"}, S_ALT},
 	{ MOD_MASK_ANY, AXIS_VERTICAL,   -1, ttysend, {.s = "\005"}, S_ALT},
 	#else
@@ -381,8 +382,8 @@ static Shortcut shortcuts[] = {
 	{ MOD_MASK_NONE,            XKB_KEY_F11,         fullscreen,      {.i =  0} },
 	#endif // FULLSCREEN_PATCH
 	#if SCROLLBACK_PATCH || REFLOW_PATCH
-	{ MOD_MASK_SHIFT,            XKB_KEY_Page_Up,     kscrollup,       {.i = -1}, S_PRI },
-	{ MOD_MASK_SHIFT,            XKB_KEY_Page_Down,   kscrolldown,     {.i = -1}, S_PRI },
+	{ MOD_MASK_SHIFT,            XKB_KEY_Page_Up,     kscrollup,       {.i = -100} },
+	{ MOD_MASK_SHIFT,            XKB_KEY_Page_Down,   kscrolldown,     {.i = -100} },
 	#endif // SCROLLBACK_PATCH || REFLOW_PATCH
 	#if CLIPBOARD_PATCH
 	{ TERMMOD,              XKB_KEY_Y,           clippaste,       {.i =  0} },
@@ -592,6 +593,7 @@ static Key key[] = {
 	{ XKB_KEY_Delete,        MOD_MASK_ANY,     "\033[3~",      +1,    0},
 	{ XKB_KEY_BackSpace,     MOD_MASK_NONE,      "\177",          0,    0},
 	{ XKB_KEY_BackSpace,     MOD_MASK_ALT,       "\033\177",      0,    0},
+	{ XKB_KEY_BackSpace,     MOD_MASK_CTRL,    "\027",          0,    0},
 	{ XKB_KEY_Home,          MOD_MASK_SHIFT,      "\033[2J",       0,   -1},
 	{ XKB_KEY_Home,          MOD_MASK_SHIFT,      "\033[1;2H",     0,   +1},
 	{ XKB_KEY_Home,          MOD_MASK_ANY,     "\033[H",        0,   -1},
