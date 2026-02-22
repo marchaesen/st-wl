@@ -287,6 +287,7 @@ static char *opt_dir   = NULL;
 
 #if ALPHA_PATCH && ALPHA_FOCUS_HIGHLIGHT_PATCH
 static int focused = 0;
+static uint8_t term_alpha_unfocused = 255;
 #endif // ALPHA_FOCUS_HIGHLIGHT_PATCH
 
 #if BLINKING_CURSOR_PATCH
@@ -825,7 +826,11 @@ kbdenter(void *data, struct wl_keyboard *keyboard, uint32_t serial,
 	win.mode |= MODE_FOCUSED;
 	if (IS_SET(MODE_FOCUS))
 		ttywrite("\033[I", 3, 0);
-	/* need to redraw the cursor */
+	/* repaint full background so focus alpha takes effect immediately */
+#if ALPHA_PATCH && ALPHA_FOCUS_HIGHLIGHT_PATCH
+	wl.resized = true;
+	tfulldirt();
+#endif
 	wlneeddraw();
 }
 
@@ -838,7 +843,11 @@ kbdleave(void *data, struct wl_keyboard *keyboard, uint32_t serial,
 	win.mode &= ~MODE_FOCUSED;
 	if (IS_SET(MODE_FOCUS))
 		ttywrite("\033[O", 3, 0);
-	/* need to redraw the cursor */
+	/* repaint full background so unfocused alpha takes effect immediately */
+#if ALPHA_PATCH && ALPHA_FOCUS_HIGHLIGHT_PATCH
+	wl.resized = true;
+	tfulldirt();
+#endif
 	wlneeddraw();
 	/* disable key repeat */
 	repeat.len = 0;
@@ -1465,7 +1474,12 @@ wlneeddraw(void)
 static void wlclear(int x1, int y1, int x2, int y2)
 {
 	uint32_t color = dc.col[IS_SET(MODE_REVERSE) ? defaultfg : defaultbg];
+#if ALPHA_PATCH && ALPHA_FOCUS_HIGHLIGHT_PATCH
+	uint8_t bg_alpha = IS_SET(MODE_FOCUSED) ? term_alpha : term_alpha_unfocused;
+	color = (color & ((uint32_t)bg_alpha << 24)) | (color & 0x00FFFFFF);
+#else
 	color = (color & term_alpha << 24) | (color & 0x00FFFFFF);
+#endif
 	wld_fill_rectangle(wld.renderer, color, x1, y1, x2 - x1, y2 - y1);
 }
 
@@ -1562,7 +1576,12 @@ xfinishdraw(void)
 void wltermclear(int col1, int row1, int col2, int row2)
 {
 	uint32_t color = dc.col[IS_SET(MODE_REVERSE) ? defaultfg : defaultbg];
+#if ALPHA_PATCH && ALPHA_FOCUS_HIGHLIGHT_PATCH
+	uint8_t tc_alpha = IS_SET(MODE_FOCUSED) ? term_alpha : term_alpha_unfocused;
+	color = (color & ((uint32_t)tc_alpha << 24)) | (color & 0x00FFFFFF);
+#else
 	color = (color & term_alpha << 24) | (color & 0x00FFFFFF);
+#endif
 	#if ANYSIZE_PATCH
 	wld_fill_rectangle(wld.renderer, color, win.hborderpx + col1 * win.cw,
 	                   win.vborderpx + row1 * win.ch, (col2 - col1 + 1) * win.cw,
@@ -1746,7 +1765,14 @@ static void wldrawCharacter(Glyph g, int x, int y)
 		wlclear(winx, winy + win.ch, winx + width, win.h);
   #endif
 	/* Clean up the region we want to draw to. */
+	#if ALPHA_PATCH && ALPHA_FOCUS_HIGHLIGHT_PATCH
+	{
+		uint8_t cell_alpha = IS_SET(MODE_FOCUSED) ? term_alpha : term_alpha_unfocused;
+		wld_fill_rectangle(wld.renderer, (bg & ((uint32_t)cell_alpha << 24)) | (bg & 0x00FFFFFF), winx, winy, width, win.ch);
+	}
+	#else
 	wld_fill_rectangle(wld.renderer, (bg & (term_alpha << 24)) | (bg & 0x00FFFFFF), winx, winy, width, win.ch);
+	#endif
 
 	/*
 	 * Search for the range in the to be printed string of glyphs

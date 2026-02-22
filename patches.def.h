@@ -22,7 +22,7 @@
  * https://github.com/juliusHuelsmann/st-focus/
  * https://st.suckless.org/patches/alpha_focus_highlight/
  */
-#define ALPHA_FOCUS_HIGHLIGHT_PATCH 0
+#define ALPHA_FOCUS_HIGHLIGHT_PATCH 1
 
 /* Adds gradient transparency to st, depends on the alpha patch.
  * https://st.suckless.org/patches/gradient/

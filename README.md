@@ -15,6 +15,16 @@ Refer to [https://st.suckless.org/](https://st.suckless.org/) for details on the
 
 ### Changelog:
 
+2026-02-21 - Enabled ALPHA_FOCUS_HIGHLIGHT_PATCH: separate active/inactive background alpha, instant repaint on focus change
+
+2026-02-10 - Fixed selection crashes, scroll-while-selecting, and lazy scrollback page allocation
+
+2026-02-10 - Fixed crash when launching without -f flag (null font fallback)
+
+2026-02-10 - Removed embedded JetBrainsMono font blobs (−97% binary size), improved font hinting
+
+2026-02-10 - Fixed key repeat stalling with Synchronized Update shells (fish, zsh+p10k, Starship)
+
 2026-01-08 - Added the xresources-xdefaults patch
 
 2025-10-28 - Added the selectionbg-alpha patch
