@@ -9,10 +9,17 @@
 #include <pixman.h>
 #include "patches.h"
 
+/* Selection debug: compile with -DDEBUG_SEL */
+#ifdef DEBUG_SEL
+#include <stdio.h>
+#define DBGSEL(fmt, ...) fprintf(stderr, "[SEL] " fmt "\n", ##__VA_ARGS__)
+#else
+#define DBGSEL(fmt, ...) ((void)0)
+#endif
+
 /* Arbitrary sizes */
 #define UTF_SIZ       4
 #define ESC_BUF_SIZ   (128*UTF_SIZ)
-
 
 /* macros */
 #ifdef DEBUG
@@ -44,7 +51,9 @@
 #define TRUECOLOR(r,g,b)	(1 << 24 | (r) << 16 | (g) << 8 | (b))
 #define IS_TRUECOL(x)		(1 << 24 & (x))
 #if SCROLLBACK_PATCH || REFLOW_PATCH
-#define HISTSIZE      2000
+#undef HISTSIZE
+#define HISTSIZE      10000
+#define HIST_PAGESIZE 256   /* allocate history lines in pages for performance */
 #endif // SCROLLBACK_PATCH | REFLOW_PATCH
 
 #if DRAG_AND_DROP_PATCH
@@ -254,6 +263,7 @@ typedef struct {
 	xkb_keysym_t keysym;
 	void (*func)(const Arg *);
 	const Arg arg;
+	uint screen; /* 0 = any, S_PRI = primary only, S_ALT = alt only */
 } Shortcut;
 
 typedef struct {
@@ -313,7 +323,9 @@ void ttywrite(const char *, size_t, int);
 void resettitle(void);
 
 void selclear(void);
+void selremove(void);
 void selinit(void);
+int selactive(void);
 void selstart(int, int, int);
 void selextend(int, int, int, int);
 int selected(int, int);
