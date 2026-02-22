@@ -304,6 +304,12 @@ static int focused = 0;
 /* smplOS: per-pixel bg alpha for unfocused terminal state, loaded from
  * term_opacity_inactive in colors.toml. Mirrors term_alpha for focused. */
 static uint8_t term_alpha_unfocused = 255;
+#if ALPHA_FOCUS_FADE_MS > 0
+/* Focus-loss alpha fade: wall-clock driven so end value is always exact. */
+static uint8_t        term_alpha_current = 255; /* interpolated alpha used while fading */
+static int            focus_fade_step    = 0;   /* 0 = idle, 1 = fading */
+static struct timespec focus_fade_start;         /* monotonic time when fade began */
+#endif // ALPHA_FOCUS_FADE_MS > 0
 #endif // ALPHA_FOCUS_HIGHLIGHT_PATCH
 
 #if BLINKING_CURSOR_PATCH
@@ -873,8 +879,12 @@ kbdenter(void *data, struct wl_keyboard *keyboard, uint32_t serial,
 	win.mode |= MODE_FOCUSED;
 	if (IS_SET(MODE_FOCUS))
 		ttywrite("\033[I", 3, 0);
-	/* repaint full background so focus alpha takes effect immediately */
+	/* repaint immediately on focus gain (snap to focused alpha) */
 #if ALPHA_PATCH && ALPHA_FOCUS_HIGHLIGHT_PATCH
+#if ALPHA_FOCUS_FADE_MS > 0
+	focus_fade_step    = 0;
+	term_alpha_current = term_alpha;
+#endif
 	wl.resized = true;
 	tfulldirt();
 #endif
@@ -890,8 +900,18 @@ kbdleave(void *data, struct wl_keyboard *keyboard, uint32_t serial,
 	win.mode &= ~MODE_FOCUSED;
 	if (IS_SET(MODE_FOCUS))
 		ttywrite("\033[O", 3, 0);
-	/* repaint full background so unfocused alpha takes effect immediately */
+	/* repaint on focus loss (fade or instant depending on ALPHA_FOCUS_FADE_MS) */
 #if ALPHA_PATCH && ALPHA_FOCUS_HIGHLIGHT_PATCH
+#if ALPHA_FOCUS_FADE_MS > 0
+	if (term_alpha != term_alpha_unfocused) {
+		focus_fade_step    = 1;
+		term_alpha_current = term_alpha;
+		clock_gettime(CLOCK_MONOTONIC, &focus_fade_start);
+	} else {
+		focus_fade_step    = 0;
+		term_alpha_current = term_alpha_unfocused;
+	}
+#endif // ALPHA_FOCUS_FADE_MS > 0
 	wl.resized = true;
 	tfulldirt();
 #endif
@@ -1208,6 +1228,27 @@ framedone(void *data, struct wl_callback *callback, uint32_t time)
 {
 	wl_callback_destroy(callback);
 	wl.framecb = NULL;
+#if ALPHA_PATCH && ALPHA_FOCUS_HIGHLIGHT_PATCH && ALPHA_FOCUS_FADE_MS > 0
+	if (focus_fade_step > 0) {
+		/* time-based interpolation: always ends exactly at term_alpha_unfocused */
+		struct timespec _now;
+		clock_gettime(CLOCK_MONOTONIC, &_now);
+		long _elapsed = (_now.tv_sec  - focus_fade_start.tv_sec)  * 1000L
+		              + (_now.tv_nsec - focus_fade_start.tv_nsec) / 1000000L;
+		if (_elapsed >= (long)ALPHA_FOCUS_FADE_MS) {
+			focus_fade_step    = 0;
+			term_alpha_current = term_alpha_unfocused;
+		} else {
+			int _a = (int)term_alpha
+			       + ((int)term_alpha_unfocused - (int)term_alpha)
+			         * (int)_elapsed / (int)ALPHA_FOCUS_FADE_MS;
+			term_alpha_current = (uint8_t)(_a < 0 ? 0 : _a > 255 ? 255 : _a);
+		}
+		wl.resized = true;
+		tfulldirt();
+		wlneeddraw();
+	} else
+#endif // ALPHA_FOCUS_FADE_MS > 0
 	if (wl.needdraw)
 		wlneeddraw();
 }
@@ -1655,7 +1696,13 @@ static void wlclear(int x1, int y1, int x2, int y2)
 {
 	uint32_t color = dc.col[IS_SET(MODE_REVERSE) ? defaultfg : defaultbg];
 	#if ALPHA_PATCH && ALPHA_FOCUS_HIGHLIGHT_PATCH
+	#if ALPHA_FOCUS_FADE_MS > 0
+	uint8_t bg_alpha = (focus_fade_step > 0)
+	                 ? term_alpha_current
+	                 : (IS_SET(MODE_FOCUSED) ? term_alpha : term_alpha_unfocused);
+	#else
 	uint8_t bg_alpha = IS_SET(MODE_FOCUSED) ? term_alpha : term_alpha_unfocused;
+	#endif // ALPHA_FOCUS_FADE_MS > 0
 	#else
 	uint8_t bg_alpha = term_alpha;
 	#endif
@@ -1761,7 +1808,13 @@ void wltermclear(int col1, int row1, int col2, int row2)
 {
 	uint32_t color = dc.col[IS_SET(MODE_REVERSE) ? defaultfg : defaultbg];
 #if ALPHA_PATCH && ALPHA_FOCUS_HIGHLIGHT_PATCH
+	#if ALPHA_FOCUS_FADE_MS > 0
+	uint8_t tc_alpha = (focus_fade_step > 0)
+	                 ? term_alpha_current
+	                 : (IS_SET(MODE_FOCUSED) ? term_alpha : term_alpha_unfocused);
+	#else
 	uint8_t tc_alpha = IS_SET(MODE_FOCUSED) ? term_alpha : term_alpha_unfocused;
+	#endif // ALPHA_FOCUS_FADE_MS > 0
 	color = (color & ((uint32_t)tc_alpha << 24)) | (color & 0x00FFFFFF);
 #else
 	color = (color & term_alpha << 24) | (color & 0x00FFFFFF);
@@ -1948,15 +2001,25 @@ static void wldrawCharacter(Glyph g, int x, int y)
 	if (winy + win.ch >= borderpx + win.th)
 		wlclear(winx, winy + win.ch, winx + width, win.h);
   #endif
-	/* Clean up the region we want to draw to. */
+	/* Fill cell background with current animated alpha.
+	 * The compositor is set to opacity 1.0 override for terminals so
+	 * per-pixel alpha passes through directly.  term_alpha_current
+	 * follows the focus-fade animation (wlclear/wltermclear use the same). */
 #if ALPHA_PATCH && ALPHA_FOCUS_HIGHLIGHT_PATCH
-	{
-		uint8_t cell_alpha = IS_SET(MODE_FOCUSED) ? term_alpha : term_alpha_unfocused;
-		wld_fill_rectangle(wld.renderer, (bg & ((uint32_t)cell_alpha << 24)) | (bg & 0x00FFFFFF), winx, winy, width, win.ch);
-	}
+	#if ALPHA_FOCUS_FADE_MS > 0
+	uint8_t cell_alpha = (focus_fade_step > 0)
+	                   ? term_alpha_current
+	                   : (IS_SET(MODE_FOCUSED) ? term_alpha : term_alpha_unfocused);
+	#else
+	uint8_t cell_alpha = IS_SET(MODE_FOCUSED) ? term_alpha : term_alpha_unfocused;
+	#endif
+#elif ALPHA_PATCH
+	uint8_t cell_alpha = term_alpha;
 #else
-	wld_fill_rectangle(wld.renderer, (bg & (term_alpha << 24)) | (bg & 0x00FFFFFF), winx, winy, width, win.ch);
+	uint8_t cell_alpha = 255;
 #endif
+	wld_fill_rectangle(wld.renderer, (bg & 0x00FFFFFF) | ((uint32_t)cell_alpha << 24),
+	                   winx, winy, width, win.ch);
 
 	/*
 	 * Search for the range in the to be printed string of glyphs

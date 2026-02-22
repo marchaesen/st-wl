@@ -1,5 +1,8 @@
 # st version
-VERSION = 1.0.1
+VERSION = 1.0.2
+
+# Uncomment for debug builds (adds fprintf tracing, disables strip)
+# DEBUGFLAGS = -g -O0 -DSTWL_DEBUG
 
 # Customize below to fit your system
 
@@ -16,11 +19,11 @@ XDG_DECORATION_PROTO = `$(PKG_CONFIG) --variable=pkgdatadir wayland-protocols`/u
 
 PKG_CONFIG = pkg-config
 
-# Uncomment the lines below for the ligatures patch / LIGATURES_PATCH
-#LIGATURES_C = hb.c
-#LIGATURES_H = hb.h
-#LIGATURES_INC = `$(PKG_CONFIG) --cflags harfbuzz`
-#LIGATURES_LIBS = `$(PKG_CONFIG) --libs harfbuzz`
+# Ligatures patch / LIGATURES_PATCH
+LIGATURES_C = hb.c
+LIGATURES_H = hb.h
+LIGATURES_INC = `$(PKG_CONFIG) --cflags harfbuzz`
+LIGATURES_LIBS = `$(PKG_CONFIG) --libs harfbuzz`
 
 # Uncomment this for the SIXEL patch / SIXEL_PATCH
 SIXEL_C = sixel.c sixel_hls.c
@@ -38,12 +41,13 @@ LIBS = -L/usr/lib -lc -lm -lutil `$(PKG_CONFIG) --libs ${PKGCFG}`\
        `$(PKG_CONFIG) --libs fontconfig` \
        `$(PKG_CONFIG) --libs freetype2` \
        $(LIGATURES_LIBS) \
+       $(SIXEL_LIBS) \
        $(NETWMICON_LIBS)
 
 # flags
 STCPPFLAGS = -DVERSION=\"$(VERSION)\" -DICON=\"$(ICONPREFIX)/$(ICONNAME)\" -D_XOPEN_SOURCE=700
-STCFLAGS = $(DEBUGFLAGS) $(INCS) $(STCPPFLAGS) $(CPPFLAGS) $(CFLAGS)
-STLDFLAGS = wld/libwld.a $(LIBS) $(LDFLAGS)
+STCFLAGS = $(DEBUGFLAGS) -O3 -flto $(INCS) $(STCPPFLAGS) $(CPPFLAGS) $(CFLAGS)
+STLDFLAGS = -flto -s wld/libwld.a $(LIBS) $(LDFLAGS)
 
 # OpenBSD:
 #CPPFLAGS = $(STCPPFLAGS) -D_XOPEN_SOURCE=600

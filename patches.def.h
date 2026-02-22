@@ -24,6 +24,13 @@
  */
 #define ALPHA_FOCUS_HIGHLIGHT_PATCH 1
 
+/* smplOS: smooth alpha fade when losing keyboard focus.
+ * Set to the desired fade duration in milliseconds (e.g. 800 for 0.8 s).
+ * Set to 0 to use the original instant switch behaviour.
+ * Requires ALPHA_PATCH and ALPHA_FOCUS_HIGHLIGHT_PATCH.
+ */
+#define ALPHA_FOCUS_FADE_MS 300
+
 /* Adds gradient transparency to st, depends on the alpha patch.
  * https://st.suckless.org/patches/gradient/
  */

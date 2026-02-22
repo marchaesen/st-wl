@@ -101,6 +101,7 @@ install: st-wl
 	mkdir -p $(DESTDIR)$(PREFIX)/bin
 	cp -f st-wl $(DESTDIR)$(PREFIX)/bin
 	chmod 755 $(DESTDIR)$(PREFIX)/bin/st-wl
+	strip $(DESTDIR)$(PREFIX)/bin/st-wl
 	mkdir -p $(DESTDIR)$(MANPREFIX)/man1
 	sed "s/VERSION/$(VERSION)/g" < st-wl.1 > $(DESTDIR)$(MANPREFIX)/man1/st-wl.1
 	chmod 644 $(DESTDIR)$(MANPREFIX)/man1/st-wl.1
