@@ -50,6 +50,8 @@ Refer to [https://st.suckless.org/](https://st.suckless.org/) for details on the
 
 ### Changelog:
 
+2026-02-21 - v1.0.1: Fixed 800ms stall during held PgUp/PgDown scroll and key-repeat (backspace, etc.) — cursor blink timeout was overriding the keyrepeat interval in pselect, causing ~800ms sleeps between repeat ticks
+
 2026-02-21 - v1.0.0: Focus-aware background alpha (active/inactive, text always opaque, instant repaint), altscreen-aware PgUp/PgDown scrollback, opaque fallback when colors.toml absent, ~97% binary size reduction (removed embedded fonts)
 
 2026-02-10 - Fixed selection crashes, scroll-while-selecting, and lazy scrollback page allocation

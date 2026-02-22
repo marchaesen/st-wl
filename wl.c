@@ -967,7 +967,7 @@ kbdkey(void *data, struct wl_keyboard *keyboard, uint32_t serial, uint32_t time,
 		if (ksym == bp->keysym && match(bp->mod, wl.xkb.mods)
 		    && (!bp->screen || (bp->screen == (tisaltscr() ? S_ALT : S_PRI)))) {
 			bp->func(&(bp->arg));
-			/* Set up function repeat for PageUp/PageDown */
+			wlneeddraw(); /* shortcut never goes through send:, so trigger draw here */
 			if (ksym == XKB_KEY_Page_Up || ksym == XKB_KEY_Page_Down ||
 			    ksym == XKB_KEY_Prior || ksym == XKB_KEY_Next) {
 				repeatfunc.func = bp->func;
@@ -2710,7 +2710,7 @@ run(void)
 			timeout = 999;
 
 		/* Ensure we don't block too long on pselect if a repeat is active */
-		if (repeat.len > 0 && repeat.started && timeout > keyrepeatinterval)
+		if (((repeat.len > 0 && repeat.started) || (repeatfunc.active && repeatfunc.started)) && timeout > keyrepeatinterval)
 			timeout = keyrepeatinterval;
 
 		drawtimeout.tv_nsec = 1000000 * timeout;
@@ -2778,27 +2778,46 @@ run(void)
 				 * Do not force a draw here.  Let the natural
 				 * event loop handle drawing via wl.needdraw.
 				 * This avoids blocking on pselect or frame callbacks
-				 * when the system or shell is under load. */
-				wlneeddraw();
+                                 * when the system or shell is under load.
+                                 *
+                                 * EXCEPTION: if the draw-batching window (maxlatency)
+                                 * has already expired we must draw NOW.  When the
+                                 * repeat interval (e.g. 20 ms) is shorter than
+                                 * maxlatency (33 ms) the top-of-loop timeout clamp
+                                 * keeps reducing the pselect wait to keyrepeatinterval,
+                                 * so the draw code at the bottom is perpetually
+                                 * bypassed via 'continue'.  Without this explicit draw
+                                 * altscreen apps (micro, vim, htop) receive many PgUp
+                                 * keypresses but the screen never updates until the
+                                 * key is released — causing the "burst then freeze"
+                                 * sluggishness. */
+                                if (wl.needdraw && !wl.framecb && drawing &&
+                                    TIMEDIFF(now, trigger) >= (long)maxlatency) {
+                                        draw();
+                                        wl_display_flush(wl.dpy);
+                                        drawing = 0;
+                                } else {
+                                        wlneeddraw();
+                                }
 
-				/* Use standard select timeout logic next iteration */
-				timeout = keyrepeatinterval;
-				continue;
-			}
+                                /* Use standard select timeout logic next iteration */
+                                timeout = keyrepeatinterval;
+                                continue;
+                        }
 
-			/* During the initial delay, adjust timeout but fall
-			 * through to the normal draw path so the first
-			 * keypress result is rendered normally. */
-		}
+                        /* During the initial delay, adjust timeout but fall
+                         * through to the normal draw path so the first
+                         * keypress result is rendered normally. */
+                }
 
-		/* Function repeat: for shortcuts like PageUp/PageDown scroll */
-		if (repeatfunc.active)
-		{
-			long timeDiff = TIMEDIFF(now, repeatfunc.last);
-			int did_repeat = 0;
+                /* Function repeat: for shortcuts like PageUp/PageDown scroll */
+                if (repeatfunc.active)
+                {
+                        long timeDiff = TIMEDIFF(now, repeatfunc.last);
+                        int did_repeat = 0;
 
-			if (!repeatfunc.started)
-			{
+                        if (!repeatfunc.started)
+                        {
 				if (timeDiff >= keyrepeatdelay)
 				{
 					repeatfunc.started = true;
@@ -2816,13 +2835,15 @@ run(void)
 
 			if (did_repeat)
 			{
-				/* Force immediate draw if no frame callback pending.
-				 * Unlike string repeat, scroll has no tty activity
-				 * so we must draw explicitly. */
-				if (!wl.framecb) {
-					draw();
-					wl_display_flush(wl.dpy);
+				/* For scroll repeats, cancel any pending frame callback so we
+				 * are never blocked by the compositor's frame timing. */
+				if (wl.framecb) {
+					wl_callback_destroy(wl.framecb);
+					wl.framecb = NULL;
 				}
+				wlneeddraw();
+				draw();
+				wl_display_flush(wl.dpy);
 				timeout = keyrepeatinterval;
 				continue;
 			}
