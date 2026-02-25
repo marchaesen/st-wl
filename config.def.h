@@ -151,7 +151,7 @@ const int boxdraw_braille = 0;
 static int bellvolume = 0;
 
 /* default TERM value */
-char *termname = "st-wl-256color";
+char *termname = "st-256color";
 
 /* default class */
 char *termclass = "terminal";
@@ -160,7 +160,7 @@ char *termclass = "terminal";
  * spaces per tab
  *
  * When you are changing this value, don't forget to adapt the »it« value in
- * the st-wl.info and appropriately install the st-wl.info in the environment where
+ * the st.info and appropriately install the st.info in the environment where
  * you use this st-wl version.
  *
  *	it#$tabspaces,
