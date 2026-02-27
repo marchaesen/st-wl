@@ -2397,6 +2397,11 @@ run(void)
 		else if (timeout > 999) // We assume the timeout is always less the 1 sec (we set drawtimeout.tv_sec always to 0)
 			timeout = 999;
 
+		/* Ensure pselect doesn't block longer than the repeat interval
+		 * when a key is held, so repeats fire at the correct rate. */
+		if (repeat.len > 0 && repeat.started && timeout > keyrepeatinterval)
+			timeout = keyrepeatinterval;
+
 		drawtimeout.tv_nsec = 1000000 * timeout;
 
 		if (pselect(MAX(wlfd, ttyfd)+1, &rfd, NULL, NULL, &drawtimeout, NULL) < 0) {
@@ -2484,43 +2489,58 @@ run(void)
 			}
 		}
 
+		/*
+		 * Key repeat: self-contained block.
+		 *
+		 * When a key is held, emit characters at the compositor's
+		 * repeat rate and immediately flag a redraw.  After emitting
+		 * a repeat we 'continue' to skip the draw-batching and
+		 * synchronized-update (SYNC_PATCH) deferral that follows.
+		 *
+		 * Without this, shells that use Synchronized Update (BSU/ESU)
+		 * — fish, zsh+Powerlevel10k, Starship, etc. — cause the
+		 * event loop to defer drawing while tinsync() returns true,
+		 * resulting in visible stalls during key repeat.  The
+		 * draw-batching idle-detection (minlatency/maxlatency) also
+		 * adds latency for all shells, since each ttywrite() produces
+		 * new tty input that resets the idle timer.
+		 */
 		if (repeat.len > 0)
 		{
 			long timeDiff = TIMEDIFF(now, repeat.last);
-			if ( !repeat.started)
+			int did_repeat = 0;
+
+			if (!repeat.started)
 			{
 				if (timeDiff >= keyrepeatdelay)
 				{
 					repeat.started = true;
-					timeout = keyrepeatinterval;
 					repeat.last = now;
 					ttywrite(repeat.str, repeat.len, 1);
-					win.mode |= MODE_BLINK; // during repeat, disable blinking
-					tsetdirtattr(ATTR_BLINK);
-					lastblink = now;
-					wlneeddraw();
-				}
-				else
-				{
-					timeout = keyrepeatdelay - timeDiff;
+					did_repeat = 1;
 				}
 			}
-			else
+			else if (timeDiff >= keyrepeatinterval)
 			{
-				if (timeDiff >= keyrepeatinterval)
-				{
-					repeat.last = now;
-					timeout = keyrepeatinterval;
-					ttywrite(repeat.str, repeat.len, 1);
-					win.mode |= MODE_BLINK; // during repeat, disable blinking
-					tsetdirtattr(ATTR_BLINK);
-					lastblink = now;
-					wlneeddraw();
-				}
-				else
-				{
-					timeout = keyrepeatinterval - timeDiff;
-				}
+				repeat.last = now;
+				ttywrite(repeat.str, repeat.len, 1);
+				did_repeat = 1;
+			}
+
+			if (did_repeat)
+			{
+				wlneeddraw();
+				timeout = keyrepeatinterval;
+				continue;  /* bypass draw-batching / SU deferral */
+			}
+
+			/* During the initial delay, adjust timeout so pselect
+			 * wakes up when the delay expires. */
+			if (!repeat.started)
+			{
+				long nextRepeat = keyrepeatdelay - timeDiff;
+				if (nextRepeat < timeout)
+					timeout = nextRepeat;
 			}
 		}
 
