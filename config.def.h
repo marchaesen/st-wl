@@ -48,7 +48,7 @@ static char *url_opener = "xdg-open";
  * 4: value of shell in /etc/passwd
  * 5: value of shell in config.h
  */
-static char *shell = "/usr/bin/zsh";
+static char *shell = "/bin/sh";
 char *utmp = NULL;
 /* scroll program: to enable use a string like "scroll" */
 char *scroll = NULL;
@@ -58,7 +58,7 @@ char *stty_args = "stty raw pass8 nl -echo -iexten -cstopb 38400";
 #if SIXEL_PATCH
 char *vtiden = "\033[?62;4c"; /* VT200 family (62) with sixel (4) */
 
-/* sixel rgb byte order: LSBFirst or MSBFirst */
+/* sixel rgb byte order: LSBFirst or MSBFirst (X11 only, unused on Wayland) */
 //int const sixelbyteorder = LSBFirst;
 #else
 char *vtiden = "\033[?6c";
@@ -89,7 +89,8 @@ static unsigned int tripleclicktimeout = 600;
 /* alt screens */
 int allowaltscreen = 1;
 
-/* key repeat timeouts (in milliseconds) */
+/* key repeat timeouts (in milliseconds)
+ * Overridden at runtime by compositor via wl_keyboard::repeat_info */
 static unsigned int keyrepeatdelay = 500;
 static unsigned int keyrepeatinterval = 25;
 
@@ -174,8 +175,9 @@ char *termclass = "terminal";
 unsigned int tabspaces = 8;
 
 #if ALPHA_PATCH
-/* bg opacity */
-#define DEFAULT_ALPHA 0.8
+/* bg opacity — default fallback. wl.c loads term_opacity_active from the
+ * active smplOS theme when available, so this is only used as a last resort. */
+#define DEFAULT_ALPHA 1.0
 float alpha = DEFAULT_ALPHA;
 uint8_t term_alpha = (uint8_t)(DEFAULT_ALPHA*255.0);
 #if ALPHA_GRADIENT_PATCH
@@ -196,35 +198,38 @@ float alphaUnfocused = 0.6;
 char *xdndescchar = " !\"#$&'()*;<>?[\\]^`{|}~";
 #endif // DRAG_AND_DROP_PATCH
 
-/* Terminal colors (16 first used in escape sequence) */
+/* Terminal colors (16 first used in escape sequence)
+ * These are compile-time defaults — theme-set-st overrides them at runtime
+ * via OSC escape sequences.  Keep these neutral/dark so new terminals look
+ * reasonable for the brief moment before OSC sequences arrive. */
 static const char *colorname[] = {
-	/* 8 normal colors */
-	[0] = "#2d2d2d", /* black   */
-	[1] = "#f2777a", /* red     */
-	[2] = "#99cc99", /* green   */
-	[3] = "#ffcc66", /* yellow  */
-	[4] = "#6699cc", /* blue    */
-	[5] = "#cc99cc", /* magenta */
-	[6] = "#66cccc", /* cyan    */
-	[7] = "#d3d0c8", /* white   */
+	/* 8 normal colors — standard ANSI */
+	[0] = "#000000", /* black   */
+	[1] = "#cc0000", /* red     */
+	[2] = "#4e9a06", /* green   */
+	[3] = "#c4a000", /* yellow  */
+	[4] = "#3465a4", /* blue    */
+	[5] = "#75507b", /* magenta */
+	[6] = "#06989a", /* cyan    */
+	[7] = "#d3d7cf", /* white   */
 
 	/* 8 bright colors */
-	[8]  = "#747369", /* black   */
-	[9]  = "#f2777a", /* red     */
-	[10] = "#99cc99", /* green   */
-	[11] = "#ffcc66", /* yellow  */
-	[12] = "#6699cc", /* blue    */
-	[13] = "#cc99cc", /* magenta */
-	[14] = "#66cccc", /* cyan    */
-	[15] = "#f2f0ec", /* white   */
+	[8]  = "#555753", /* black   */
+	[9]  = "#ef2929", /* red     */
+	[10] = "#8ae234", /* green   */
+	[11] = "#fce94f", /* yellow  */
+	[12] = "#729fcf", /* blue    */
+	[13] = "#ad7fa8", /* magenta */
+	[14] = "#34e2e2", /* cyan    */
+	[15] = "#eeeeec", /* white   */
 
 	[255] = 0,
 
 	/* more colors can be added after 255 to use with DefaultXX */
-	"#add8e6", /* 256 -> cursor */
-	"#555555", /* 257 -> rev cursor*/
-	"#300a24", /* 258 -> bg */
-	"#e5e5e5", /* 259 -> fg */
+	"#d3d7cf", /* 256 -> cursor */
+	"#555753", /* 257 -> rev cursor*/
+	"#000000", /* 258 -> bg */
+	"#d3d7cf", /* 259 -> fg */
 };
 
 
@@ -322,8 +327,8 @@ static Axiskey ashortcuts[] = {
 	{ ControlMask,          Button2, selopen,        {.i = 0},      1 },
 	#endif // OPEN_SELECTED_TEXT_PATCH
 	#if SCROLLBACK_MOUSE_PATCH
-	{ MOD_MASK_SHIFT, AXIS_VERTICAL, +1, kscrollup   , {.i = 1}, S_PRI},
-	{ MOD_MASK_SHIFT, AXIS_VERTICAL, -1, kscrolldown , {.i = 1}, S_PRI},
+	{ MOD_MASK_SHIFT, AXIS_VERTICAL, +1, kscrolldown , {.i = 3}, S_PRI},
+	{ MOD_MASK_SHIFT, AXIS_VERTICAL, -1, kscrollup   , {.i = 3}, S_PRI},
 	#elif UNIVERSCROLL_PATCH
 	{ MOD_MASK_ANY, AXIS_VERTICAL,   +1, ttysend, {.s = "\033[5;2~"}, S_PRI},
 	{ MOD_MASK_ANY, AXIS_VERTICAL,   -1, ttysend, {.s = "\033[6;2~"}, S_PRI},
@@ -332,8 +337,8 @@ static Axiskey ashortcuts[] = {
 	{ MOD_MASK_SHIFT, AXIS_VERTICAL, -1, ttysend, {.s = "\033[6;2~"} },
 	#endif // SCROLLBACK_MOUSE_PATCH
 	#if SCROLLBACK_MOUSE_ALTSCREEN_PATCH || REFLOW_PATCH
-	{ MOD_MASK_ANY, AXIS_VERTICAL,   +1, kscrollup,   {.i = 1}, S_PRI},
-	{ MOD_MASK_ANY, AXIS_VERTICAL,   -1, kscrolldown, {.i = 1}, S_PRI},
+	{ MOD_MASK_ANY, AXIS_VERTICAL,   +1, kscrolldown, {.i = 3}, S_PRI},
+	{ MOD_MASK_ANY, AXIS_VERTICAL,   -1, kscrollup,   {.i = 3}, S_PRI},
 	{ MOD_MASK_ANY, AXIS_VERTICAL,   +1, ttysend, {.s = "\031"}, S_ALT},
 	{ MOD_MASK_ANY, AXIS_VERTICAL,   -1, ttysend, {.s = "\005"}, S_ALT},
 	#else
@@ -381,8 +386,10 @@ static Shortcut shortcuts[] = {
 	{ MOD_MASK_NONE,            XKB_KEY_F11,         fullscreen,      {.i =  0} },
 	#endif // FULLSCREEN_PATCH
 	#if SCROLLBACK_PATCH || REFLOW_PATCH
-	{ MOD_MASK_SHIFT,            XKB_KEY_Page_Up,     kscrollup,       {.i = -1}, S_PRI },
-	{ MOD_MASK_SHIFT,            XKB_KEY_Page_Down,   kscrolldown,     {.i = -1}, S_PRI },
+	{ MOD_MASK_NONE,             XKB_KEY_Page_Up,     kscrollup,       {.i = -100}, S_PRI },
+	{ MOD_MASK_NONE,             XKB_KEY_Page_Down,   kscrolldown,     {.i = -100}, S_PRI },
+	{ MOD_MASK_SHIFT,            XKB_KEY_Page_Up,     kscrollup,       {.i = -100}, S_PRI },
+	{ MOD_MASK_SHIFT,            XKB_KEY_Page_Down,   kscrolldown,     {.i = -100}, S_PRI },
 	#endif // SCROLLBACK_PATCH || REFLOW_PATCH
 	#if CLIPBOARD_PATCH
 	{ TERMMOD,              XKB_KEY_Y,           clippaste,       {.i =  0} },
@@ -592,6 +599,7 @@ static Key key[] = {
 	{ XKB_KEY_Delete,        MOD_MASK_ANY,     "\033[3~",      +1,    0},
 	{ XKB_KEY_BackSpace,     MOD_MASK_NONE,      "\177",          0,    0},
 	{ XKB_KEY_BackSpace,     MOD_MASK_ALT,       "\033\177",      0,    0},
+	{ XKB_KEY_BackSpace,     MOD_MASK_CTRL,    "\027",          0,    0},
 	{ XKB_KEY_Home,          MOD_MASK_SHIFT,      "\033[2J",       0,   -1},
 	{ XKB_KEY_Home,          MOD_MASK_SHIFT,      "\033[1;2H",     0,   +1},
 	{ XKB_KEY_Home,          MOD_MASK_ANY,     "\033[H",        0,   -1},

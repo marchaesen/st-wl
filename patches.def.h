@@ -22,7 +22,14 @@
  * https://github.com/juliusHuelsmann/st-focus/
  * https://st.suckless.org/patches/alpha_focus_highlight/
  */
-#define ALPHA_FOCUS_HIGHLIGHT_PATCH 0
+#define ALPHA_FOCUS_HIGHLIGHT_PATCH 1
+
+/* smplOS: smooth alpha fade when losing keyboard focus.
+ * Set to the desired fade duration in milliseconds (e.g. 800 for 0.8 s).
+ * Set to 0 to use the original instant switch behaviour.
+ * Requires ALPHA_PATCH and ALPHA_FOCUS_HIGHLIGHT_PATCH.
+ */
+#define ALPHA_FOCUS_FADE_MS 300
 
 /* Adds gradient transparency to st, depends on the alpha patch.
  * https://st.suckless.org/patches/gradient/
@@ -359,19 +366,19 @@
 /* Scroll back through terminal output using Shift+{PageUp, PageDown}.
  * https://st.suckless.org/patches/scrollback/
  */
-#define SCROLLBACK_PATCH 0
+#define SCROLLBACK_PATCH 1
 
 /* Scroll back through terminal output using Shift+MouseWheel.
  * This variant depends on SCROLLBACK_PATCH being enabled.
  * https://st.suckless.org/patches/scrollback/
  */
-#define SCROLLBACK_MOUSE_PATCH 0
+#define SCROLLBACK_MOUSE_PATCH 1
 
-/* Scroll back through terminal output using mouse wheel (when not in MODE_ALTSCREEN).
+/* Scroll back through terminal output using MouseWheel when in alt screen (e.g. less or vim).
  * This variant depends on SCROLLBACK_PATCH being enabled.
  * https://st.suckless.org/patches/scrollback/
  */
-#define SCROLLBACK_MOUSE_ALTSCREEN_PATCH 0
+#define SCROLLBACK_MOUSE_ALTSCREEN_PATCH 1
 
 /* This patch adds the two color-settings selectionfg and selectionbg to config.def.h.
  * Those define the fore- and background colors which are used when text on the screen is selected

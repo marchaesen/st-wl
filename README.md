@@ -1,6 +1,41 @@
-Similar to [dwm-flexipatch](https://github.com/bakkeby/dwm-flexipatch) this st 0.9.3 (6e97047, 2025-08-09) project has a different take on st patching. It uses preprocessor directives to decide whether or not to include a patch during build time. Essentially this means that this build, for better or worse, contains both the patched _and_ the original code. The aim being that you can select which patches to include and the build will contain that code and nothing more.
+Similar to [dwm-flexipatch](https://github.com/bakkeby/dwm-flexipatch) this st 1.0.0 project has a different take on st patching. It uses preprocessor directives to decide whether or not to include a patch during build time. Essentially this means that this build, for better or worse, contains both the patched _and_ the original code. The aim being that you can select which patches to include and the build will contain that code and nothing more.
 
-For example to include the `alpha` patch then you would only need to flip this setting from 0 to 1 in [patches.h](https://github.com/bakkeby/st-flexipatch/blob/master/patches.def.h):
+---
+
+![st-wl focus-aware transparency and inline image rendering](images/9.st.gif)
+
+## What's new in v1.0.0
+
+### Focus-Aware Background Transparency
+
+Window transparency is now fully focus-aware. Focused and unfocused terminal windows each carry their own independently configurable background alpha. **Text is always rendered at 100% opacity** — only the background fades, so legibility is never compromised regardless of how low you set the inactive alpha.
+
+Configure both values in your `colors.toml`:
+
+```toml
+term_opacity_active   = "0.85"   # focused window
+term_opacity_inactive = "0.55"   # unfocused window
+```
+
+Changes are picked up on the next terminal launch. If `colors.toml` is not found at any of the expected locations, st-wl falls back gracefully to a **fully opaque solid background** rather than rendering transparent garbage.
+
+### Inline Image Rendering
+
+st-wl supports both **SIXEL** graphics and **w3m** images, letting you display photos, plots, and diagrams directly in the terminal without leaving your workflow. Combine it with tools like `chafa`, `viu`, `timg`, or `gnuplot` to turn any terminal into a capable image viewer.
+
+### Drastically Reduced Binary Size
+
+Embedded JetBrains Mono font blobs have been stripped from the binary entirely. The result is a **~97% reduction in binary size** — st-wl now ships as a lean, fast executable and sources fonts from the system font stack, just like every other terminal emulator.
+
+### Bug Fixes & Reliability
+
+- **Scrollback respects altscreen** — PgUp/PgDown no longer bleed through into the scrollback buffer when a full-screen TUI is running (micro, vim, htop, ncdu, etc.). The keypress passes straight through to the application, not to st's scroll handler.
+- **Key repeat stalling fixed** — no more frozen keyboard input with shells that use the Synchronized Update protocol (fish, zsh + Powerlevel10k, Starship).
+- **Null font fallback crash fixed** — launching st-wl without a `-f` flag no longer segfaults.
+- **Selection stability** — fixed crashes on scroll-while-selecting and improved lazy scrollback page allocation.
+
+---
+ then you would only need to flip this setting from 0 to 1 in [patches.h](https://github.com/bakkeby/st-flexipatch/blob/master/patches.def.h):
 ```c
 #define ALPHA_PATCH 1
 ```
@@ -14,6 +49,18 @@ Refer to [https://st.suckless.org/](https://st.suckless.org/) for details on the
 ---
 
 ### Changelog:
+
+2026-02-21 - v1.0.1: Fixed 800ms stall during held PgUp/PgDown scroll and key-repeat (backspace, etc.) — cursor blink timeout was overriding the keyrepeat interval in pselect, causing ~800ms sleeps between repeat ticks
+
+2026-02-21 - v1.0.0: Focus-aware background alpha (active/inactive, text always opaque, instant repaint), altscreen-aware PgUp/PgDown scrollback, opaque fallback when colors.toml absent, ~97% binary size reduction (removed embedded fonts)
+
+2026-02-10 - Fixed selection crashes, scroll-while-selecting, and lazy scrollback page allocation
+
+2026-02-10 - Fixed crash when launching without -f flag (null font fallback)
+
+2026-02-10 - Removed embedded JetBrainsMono font blobs (−97% binary size), improved font hinting
+
+2026-02-10 - Fixed key repeat stalling with Synchronized Update shells (fish, zsh+p10k, Starship)
 
 2026-01-08 - Added the xresources-xdefaults patch
 

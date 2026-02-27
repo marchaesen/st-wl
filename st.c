@@ -22,8 +22,72 @@
 #include "win.h"
 
 #if KEYBOARDSELECT_PATCH
-#include <X11/keysym.h>
-#include <X11/X.h>
+#include <xkbcommon/xkbcommon-keysyms.h>
+/* XK_ compat aliases for keyboard select patch (ported from X11 keysyms) */
+#define XK_Escape       XKB_KEY_Escape
+#define XK_Return       XKB_KEY_Return
+#define XK_BackSpace    XKB_KEY_BackSpace
+#define XK_Home         XKB_KEY_Home
+#define XK_End          XKB_KEY_End
+#define XK_Prior        XKB_KEY_Prior
+#define XK_Page_Up      XKB_KEY_Page_Up
+#define XK_Page_Down    XKB_KEY_Page_Down
+#define XK_KP_Home      XKB_KEY_KP_Home
+#define XK_KP_End       XKB_KEY_KP_End
+#define XK_KP_Page_Up   XKB_KEY_KP_Page_Up
+#define XK_KP_Page_Down XKB_KEY_KP_Page_Down
+#define XK_KP_Down      XKB_KEY_KP_Down
+#define XK_KP_Left      XKB_KEY_KP_Left
+#define XK_KP_Divide    XKB_KEY_KP_Divide
+#define XK_KP_Multiply  XKB_KEY_KP_Multiply
+#define XK_KP_0         XKB_KEY_KP_0
+#define XK_KP_9         XKB_KEY_KP_9
+#define XK_0            XKB_KEY_0
+#define XK_9            XKB_KEY_9
+#define XK_slash        XKB_KEY_slash
+#define XK_question     XKB_KEY_question
+#define XK_semicolon    XKB_KEY_semicolon
+#define XK_comma        XKB_KEY_comma
+#define XK_dollar       XKB_KEY_dollar
+#define XK_underscore   XKB_KEY_underscore
+#define XK_asciicircum  XKB_KEY_asciicircum
+#define XK_asterisk     XKB_KEY_asterisk
+#define XK_exclam       XKB_KEY_exclam
+#define XK_A            XKB_KEY_A
+#define XK_B            XKB_KEY_B
+#define XK_E            XKB_KEY_E
+#define XK_F            XKB_KEY_F
+#define XK_G            XKB_KEY_G
+#define XK_H            XKB_KEY_H
+#define XK_I            XKB_KEY_I
+#define XK_J            XKB_KEY_J
+#define XK_K            XKB_KEY_K
+#define XK_L            XKB_KEY_L
+#define XK_M            XKB_KEY_M
+#define XK_N            XKB_KEY_N
+#define XK_R            XKB_KEY_R
+#define XK_T            XKB_KEY_T
+#define XK_V            XKB_KEY_V
+#define XK_W            XKB_KEY_W
+#define XK_Y            XKB_KEY_Y
+#define XK_b            XKB_KEY_b
+#define XK_e            XKB_KEY_e
+#define XK_f            XKB_KEY_f
+#define XK_g            XKB_KEY_g
+#define XK_h            XKB_KEY_h
+#define XK_j            XKB_KEY_j
+#define XK_k            XKB_KEY_k
+#define XK_l            XKB_KEY_l
+#define XK_n            XKB_KEY_n
+#define XK_q            XKB_KEY_q
+#define XK_r            XKB_KEY_r
+#define XK_s            XKB_KEY_s
+#define XK_t            XKB_KEY_t
+#define XK_v            XKB_KEY_v
+#define XK_w            XKB_KEY_w
+#define XK_y            XKB_KEY_y
+#define XK_z            XKB_KEY_z
+#define XK_F11          XKB_KEY_F11
 #endif // KEYBOARDSELECT_PATCH
 
 #if SIXEL_PATCH
@@ -268,6 +332,31 @@ static const Rune utfmax[UTF_SIZ + 1] = {0x10FFFF, 0x7F, 0x7FF, 0xFFFF, 0x10FFFF
 
 #include "patch/st_include.h"
 
+#if SCROLLBACK_PATCH || REFLOW_PATCH
+/*
+ * Ensure history line at index idx is allocated.
+ * Allocates an entire page of HIST_PAGESIZE lines at once for performance.
+ */
+static void
+histensure(int idx)
+{
+	int page_start, page_end, i;
+
+	if (term.hist[idx])
+		return;
+
+	page_start = (idx / HIST_PAGESIZE) * HIST_PAGESIZE;
+	page_end = page_start + HIST_PAGESIZE;
+	if (page_end > HISTSIZE)
+		page_end = HISTSIZE;
+
+	for (i = page_start; i < page_end; i++) {
+		if (!term.hist[i])
+			term.hist[i] = xmalloc(term.col * sizeof(Glyph));
+	}
+}
+#endif // SCROLLBACK_PATCH || REFLOW_PATCH
+
 ssize_t
 xwrite(int fd, const char *s, size_t len)
 {
@@ -442,6 +531,12 @@ selinit(void)
 	sel.ob.x = -1;
 }
 
+int
+selactive(void)
+{
+	return sel.mode != SEL_IDLE;
+}
+
 #if !REFLOW_PATCH
 int
 tlinelen(int y)
@@ -469,6 +564,7 @@ tlinelen(int y)
 void
 selstart(int col, int row, int snap)
 {
+	DBGSEL("selstart col=%d row=%d snap=%d scr=%d", col, row, snap, term.scr);
 	selclear();
 	sel.mode = SEL_EMPTY;
 	sel.type = SEL_REGULAR;
@@ -477,6 +573,9 @@ selstart(int col, int row, int snap)
 	sel.oe.x = sel.ob.x = col;
 	sel.oe.y = sel.ob.y = row;
 	selnormalize();
+	DBGSEL("selstart after norm: ob=(%d,%d) oe=(%d,%d) nb=(%d,%d) ne=(%d,%d)",
+		sel.ob.x, sel.ob.y, sel.oe.x, sel.oe.y,
+		sel.nb.x, sel.nb.y, sel.ne.x, sel.ne.y);
 
 	if (sel.snap != 0)
 		sel.mode = SEL_READY;
@@ -487,6 +586,9 @@ void
 selextend(int col, int row, int type, int done)
 {
 	int oldey, oldex, oldsby, oldsey, oldtype;
+
+	DBGSEL("selextend col=%d row=%d done=%d scr=%d mode=%d",
+		col, row, done, term.scr, sel.mode);
 
 	if (sel.mode == SEL_IDLE)
 		return;
@@ -691,6 +793,89 @@ getsel(void)
 	if (sel.ob.x == -1)
 		return NULL;
 
+	DBGSEL("getsel: ob=(%d,%d) oe=(%d,%d) nb=(%d,%d) ne=(%d,%d) scr=%d row=%d",
+		sel.ob.x, sel.ob.y, sel.oe.x, sel.oe.y,
+		sel.nb.x, sel.nb.y, sel.ne.x, sel.ne.y,
+		term.scr, term.row);
+
+	/* Normalize without selsnap (coords may be off-screen) */
+	if (sel.type == SEL_REGULAR && sel.ob.y != sel.oe.y) {
+		sel.nb.x = sel.ob.y < sel.oe.y ? sel.ob.x : sel.oe.x;
+		sel.ne.x = sel.ob.y < sel.oe.y ? sel.oe.x : sel.ob.x;
+	} else {
+		sel.nb.x = MIN(sel.ob.x, sel.oe.x);
+		sel.ne.x = MAX(sel.ob.x, sel.oe.x);
+	}
+	sel.nb.y = MIN(sel.ob.y, sel.oe.y);
+	sel.ne.y = MAX(sel.ob.y, sel.oe.y);
+
+	DBGSEL("getsel after renorm: nb=(%d,%d) ne=(%d,%d)",
+		sel.nb.x, sel.nb.y, sel.ne.x, sel.ne.y);
+
+	/* Validate selection bounds */
+	if (sel.nb.y > sel.ne.y)
+		return NULL;
+	if (sel.nb.x < 0 || sel.ne.x < 0 || sel.nb.x >= term.col || sel.ne.x >= term.col)
+		return NULL;
+
+	#if SCROLLBACK_PATCH
+	/* Clamp to valid TLINE range */
+	{
+		int ystart = sel.nb.y < 0 ? 0 : sel.nb.y;
+		int ymax = term.row + term.scr - 1;
+		int yend = sel.ne.y > ymax ? ymax : sel.ne.y;
+		int xstart, xend;
+
+		if (ystart > yend)
+			return NULL;
+
+		DBGSEL("getsel clamped: y=%d..%d (from %d..%d)",
+			ystart, yend, sel.nb.y, sel.ne.y);
+
+		bufsize = (term.col+1) * (yend-ystart+1) * UTF_SIZ;
+		ptr = str = xmalloc(bufsize);
+
+		for (y = ystart; y <= yend; y++)
+		{
+			if ((linelen = tlinelen(y)) == 0) {
+				*ptr++ = '\n';
+				continue;
+			}
+
+			xstart = (y == sel.nb.y) ? sel.nb.x : 0;
+			xend = (y == sel.ne.y) ? sel.ne.x : term.col - 1;
+
+			if (sel.type == SEL_RECTANGULAR) {
+				xstart = sel.nb.x;
+				xend = sel.ne.x;
+			}
+
+			gp = &TLINE(y)[xstart];
+			lastx = xend;
+			last = &TLINE(y)[MIN(lastx, linelen-1)];
+			while (last >= gp && last->u == ' ')
+				--last;
+
+			for ( ; gp <= last; ++gp) {
+				if (gp->mode & ATTR_WDUMMY)
+					continue;
+				ptr += utf8encode(gp->u, ptr);
+			}
+
+			if ((y < yend || lastx >= linelen)
+			    && (!(last->mode & ATTR_WRAP) || sel.type == SEL_RECTANGULAR))
+				*ptr++ = '\n';
+		}
+		*ptr = 0;
+		return str;
+	}
+	#else
+	if (sel.nb.y < 0 || sel.ne.y >= term.row)
+		return NULL;
+	#endif
+	if (sel.nb.x < 0 || sel.ne.x < 0 || sel.nb.x >= term.col || sel.ne.x >= term.col)
+		return NULL;
+
 	bufsize = (term.col+1) * (sel.ne.y-sel.nb.y+1) * UTF_SIZ;
 	ptr = str = xmalloc(bufsize);
 
@@ -780,9 +965,15 @@ selclear(void)
 {
 	if (sel.ob.x == -1)
 		return;
-
 	tsetdirt(sel.nb.y, sel.ne.y);
 	selinit();
+}
+
+void
+selremove(void)
+{
+	sel.mode = SEL_IDLE;
+	sel.ob.x = -1;
 }
 
 void
@@ -837,6 +1028,8 @@ execsh(char *cmd, char **args)
 	setenv("HOME", pw->pw_dir, 1);
 	setenv("TERM", termname, 1);
 	setenv("COLORTERM", "truecolor", 1);
+	setenv("TERM_PROGRAM", "st-wl", 1);
+	setenv("TERM_PROGRAM_VERSION", VERSION, 1);
 
 	signal(SIGCHLD, SIG_DFL);
 	signal(SIGHUP, SIG_DFL);
@@ -1379,6 +1572,7 @@ tscrollup(int orig, int n)
 	if (copyhist && !IS_SET(MODE_ALTSCREEN)) {
 		for (i = 0; i < n; i++) {
 			term.histi = (term.histi + 1) % HISTSIZE;
+			histensure(term.histi);
 			temp = term.hist[term.histi];
 			term.hist[term.histi] = term.line[orig+i];
 			term.line[orig+i] = temp;
@@ -2347,8 +2541,10 @@ csihandle(void)
 				term.histn = 0;
 				Glyph g=(Glyph){.bg=term.c.attr.bg, .fg=term.c.attr.fg, .u=' ', .mode=0};
 				for (int i = 0; i < HISTSIZE; i++) {
-					for (int j = 0; j < maxcol; j++)
-						term.hist[i][j] = g;
+					if (term.hist[i]) {
+						for (int j = 0; j < maxcol; j++)
+							term.hist[i][j] = g;
+					}
 				}
 			}
 			#endif // SCROLLBACK_PATCH
@@ -2609,7 +2805,7 @@ csihandle(void)
 	case '>':
 		switch (csiescseq.mode[1]) {
 			case 'q': // XTVERION
-				n = snprintf(buffer, sizeof buffer, "\x1bP>|st-wl(0.9.2)\x1b\\");
+				n = snprintf(buffer, sizeof buffer, "\x1bP>|st-wl(" VERSION ")\x1b\\");
 				ttywrite(buffer, n, 1);
 			break;
 			case 'c': // Secondary DA (DA2)
@@ -3746,9 +3942,11 @@ tresize(int col, int row)
 	#if SCROLLBACK_PATCH
 	Glyph gc=(Glyph){.bg=term.c.attr.bg, .fg=term.c.attr.fg, .u=' ', .mode=0};
 	for (i = 0; i < HISTSIZE; i++) {
-		term.hist[i] = xrealloc(term.hist[i], col * sizeof(Glyph));
-		for (j = mincol; j < col; j++)
-			term.hist[i][j] = gc;
+		if (term.hist[i]) {
+			term.hist[i] = xrealloc(term.hist[i], col * sizeof(Glyph));
+			for (j = mincol; j < col; j++)
+				term.hist[i][j] = gc;
+		}
 	}
 	#endif // SCROLLBACK_PATCH
 
