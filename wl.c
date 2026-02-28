@@ -2295,7 +2295,7 @@ wlinit(int cols, int rows)
 	if (!FcInit())
 		die("Could not init fontconfig.\n");
 
-	usedfont = opt_font;
+	usedfont = opt_font ? opt_font : font;
 	wld.fontctx = wld_font_create_context();
 	wlloadfonts(usedfont, DEFAULTFONTSIZE);
 
