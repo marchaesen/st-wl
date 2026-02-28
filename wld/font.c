@@ -25,10 +25,6 @@
 
 #include <fontconfig/fcfreetype.h>
 
-#include "JetBrainsMonoNerdFont-Bold.h"
-#include "JetBrainsMonoNerdFont-BoldItalic.h"
-#include "JetBrainsMonoNerdFont-Italic.h"
-#include "JetBrainsMonoNerdFont-Regular.h"
 
 EXPORT
 struct wld_font_context * wld_font_create_context()
@@ -63,19 +59,6 @@ void wld_font_destroy_context(struct wld_font_context * context)
 		free(context);
 }
 */
-const unsigned char *fontdatas[]=
-{
-	_usr_share_fonts_truetype_jetbrains_JetBrainsMonoNerdFont_Regular_ttf,
-	_usr_share_fonts_truetype_jetbrains_JetBrainsMonoNerdFont_Italic_ttf,
-	_usr_share_fonts_truetype_jetbrains_JetBrainsMonoNerdFont_Bold_ttf,
-	_usr_share_fonts_truetype_jetbrains_JetBrainsMonoNerdFont_BoldItalic_ttf
-};
-unsigned fontdatasizes[]={
-	sizeof(_usr_share_fonts_truetype_jetbrains_JetBrainsMonoNerdFont_Regular_ttf),
-	sizeof(_usr_share_fonts_truetype_jetbrains_JetBrainsMonoNerdFont_Italic_ttf),
-	sizeof(_usr_share_fonts_truetype_jetbrains_JetBrainsMonoNerdFont_Bold_ttf),
-	sizeof(_usr_share_fonts_truetype_jetbrains_JetBrainsMonoNerdFont_BoldItalic_ttf)
-};
 
 EXPORT
 struct wld_font * wld_font_open_pattern(struct wld_font_context * context,
@@ -139,11 +122,8 @@ struct wld_font * wld_font_open_pattern(struct wld_font_context * context,
 	}
 	else
 	{
-		const FT_Byte *fontdata = (const FT_Byte *)fontdatas[type];
-		unsigned fontdatasize = fontdatasizes[type];
-		error = FT_New_Memory_Face(context->library, fontdata, fontdatasize, 0, &font->face);
-
-		error = FT_Set_Pixel_Sizes(font->face, 0, fontsize);
+		DEBUGPRNT("No font pattern provided\n");
+		goto error1;
 	}
 
 	font->base.ascent = font->face->size->metrics.ascender >> 6;
@@ -183,7 +163,7 @@ bool font_ensure_glyph(struct font * font, FT_UInt glyph_index)
 			if (!glyph)
 				return false;
 
-			FT_Load_Glyph(font->face, glyph_index, FT_LOAD_DEFAULT);
+			FT_Load_Glyph(font->face, glyph_index, FT_LOAD_TARGET_NORMAL);
 			FT_Render_Glyph(font->face->glyph, FT_RENDER_MODE_NORMAL);
 
 			FT_Bitmap_New(&glyph->bitmap);
