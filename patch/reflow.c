@@ -203,7 +203,8 @@ treflow(int col, int row)
 	/* resize rest of the history lines */
 	for (/*i = -term.histf - 1 */; i >= -HISTSIZE; i--) {
 		j = (term.histi + i + 1 + HISTSIZE) % HISTSIZE;
-		term.hist[j] = xrealloc(term.hist[j], col * sizeof(Glyph));
+		if (term.hist[j])
+			term.hist[j] = xrealloc(term.hist[j], col * sizeof(Glyph));
 	}
 
 	#if SIXEL_PATCH
@@ -474,6 +475,7 @@ tscrollup(int top, int bot, int n, int mode)
 	if (savehist) {
 		for (i = 0; i < n; i++) {
 			term.histi = (term.histi + 1) % HISTSIZE;
+			histensure(term.histi);
 			temp = term.hist[term.histi];
 			for (j = 0; j < term.col; j++)
 				tclearglyph(&temp[j], 1);
@@ -643,7 +645,7 @@ tnew(int col, int row)
 	term.dirty = xmalloc(row * sizeof(*term.dirty));
 	term.tabs = xmalloc(col * sizeof(*term.tabs));
 	for (i = 0; i < HISTSIZE; i++)
-		term.hist[i] = xmalloc(col * sizeof(Glyph));
+		term.hist[i] = NULL;
 	treset();
 }
 

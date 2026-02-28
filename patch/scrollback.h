@@ -4,6 +4,8 @@
 
 void kscrolldown(const Arg *);
 void kscrollup(const Arg *);
+void kscrolldown_nosel(int n);
+void kscrollup_nosel(int n);
 
 #if SCROLLBACK_MOUSE_PATCH || SCROLLBACK_MOUSE_ALTSCREEN_PATCH
 typedef struct {

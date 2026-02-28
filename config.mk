@@ -1,5 +1,8 @@
 # st version
-VERSION = 0.9.3
+VERSION = 0.9.5
+
+# Uncomment for debug builds (adds fprintf tracing, disables strip)
+# DEBUGFLAGS = -g -O0 -DSTWL_DEBUG
 
 # Customize below to fit your system
 
@@ -16,15 +19,15 @@ XDG_DECORATION_PROTO = `$(PKG_CONFIG) --variable=pkgdatadir wayland-protocols`/u
 
 PKG_CONFIG = pkg-config
 
-# Uncomment the lines below for the ligatures patch / LIGATURES_PATCH
-#LIGATURES_C = hb.c
-#LIGATURES_H = hb.h
-#LIGATURES_INC = `$(PKG_CONFIG) --cflags harfbuzz`
-#LIGATURES_LIBS = `$(PKG_CONFIG) --libs harfbuzz`
+# Ligatures patch / LIGATURES_PATCH
+LIGATURES_C = hb.c
+LIGATURES_H = hb.h
+LIGATURES_INC = `$(PKG_CONFIG) --cflags harfbuzz`
+LIGATURES_LIBS = `$(PKG_CONFIG) --libs harfbuzz`
 
 # Uncomment this for the SIXEL patch / SIXEL_PATCH
-SIXEL_C = sixel.c sixel_hls.c
-SIXEL_LIBS = `$(PKG_CONFIG) --libs imlib2`
+#SIXEL_C = sixel.c sixel_hls.c
+#SIXEL_LIBS = `$(PKG_CONFIG) --libs imlib2`
 
 # Uncomment for the netwmicon patch / NETWMICON_PATCH
 #NETWMICON_LIBS = `$(PKG_CONFIG) --libs gdlib`
@@ -38,11 +41,12 @@ LIBS = -L/usr/lib -lc -lm -lutil `$(PKG_CONFIG) --libs ${PKGCFG}`\
        `$(PKG_CONFIG) --libs fontconfig` \
        `$(PKG_CONFIG) --libs freetype2` \
        $(LIGATURES_LIBS) \
+       $(SIXEL_LIBS) \
        $(NETWMICON_LIBS)
 
 # flags
 STCPPFLAGS = -DVERSION=\"$(VERSION)\" -DICON=\"$(ICONPREFIX)/$(ICONNAME)\" -D_XOPEN_SOURCE=700
-STCFLAGS = $(DEBUGFLAGS) $(INCS) $(STCPPFLAGS) $(CPPFLAGS) $(CFLAGS)
+STCFLAGS = $(DEBUGFLAGS) -O2 $(INCS) $(STCPPFLAGS) $(CPPFLAGS) $(CFLAGS)
 STLDFLAGS = wld/libwld.a $(LIBS) $(LDFLAGS)
 
 # OpenBSD:
