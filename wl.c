@@ -61,6 +61,21 @@ typedef struct {
 
 #define AXIS_VERTICAL   WL_POINTER_AXIS_VERTICAL_SCROLL
 
+/* Client-Side Decorations (CSD) */
+#define CSD_TITLEBAR_HEIGHT 30
+#define CSD_BORDER_WIDTH    4
+#define CSD_BTN_W          30
+#define CSD_CLOSE_BTN_W    CSD_BTN_W
+#define CSD_MAXIMIZE_BTN_W CSD_BTN_W
+#define CSD_MINIMIZE_BTN_W CSD_BTN_W
+#define CSD_TITLEBAR_COLOR  0xFF333333
+#define CSD_BORDER_COLOR    0xFF333333
+#define CSD_TITLE_COLOR     0xFFCCCCCC
+#define CSD_CLOSE_HOVER_BG  0xFFCC0000
+#define CSD_BTN_HOVER_BG    0xFF555555
+#define CSD_CLOSE_COLOR     0xFFCCCCCC
+#define CSD_BTN_COLOR       0xFFCCCCCC
+
 /* function definitions used in config.h */
 static void clipcopy(const Arg *);
 static void clippaste(const Arg *);
@@ -106,14 +121,39 @@ typedef struct {
 	struct xdg_wm_base *wm;
 	struct xdg_surface *xdgsurface;
 	struct xdg_toplevel *xdgtoplevel;
-  struct zxdg_decoration_manager_v1 *decoration_manager;
+	struct zxdg_decoration_manager_v1 *decoration_manager;
+	struct zxdg_toplevel_decoration_v1 *csd_decoration;
 	XKB xkb;
 	bool configured;
 	int px, py; /* pointer x and y */
 	struct wl_callback * framecb;
 	uint32_t globalserial; /* global event serial */
 	bool needdraw;
-  bool resized;
+	bool resized;
+	bool fullscreen_state;
+
+	/* CSD related state */
+	bool csd_enabled ;
+	/* CSD state */
+	char csd_title[256];
+	bool csd_close_hover;
+	bool csd_maximize_hover;
+	bool csd_minimize_hover;
+	bool csd_maximized;
+	uint32_t csd_pointer_serial;
+	struct wl_pointer *csd_pointer;
+
+	/* CSD cursor types */
+	struct wl_cursor *cursor_default;
+	struct wl_cursor *cursor_top;
+	struct wl_cursor *cursor_bottom;
+	struct wl_cursor *cursor_left;
+	struct wl_cursor *cursor_right;
+	struct wl_cursor *cursor_top_left;
+	struct wl_cursor *cursor_top_right;
+	struct wl_cursor *cursor_bottom_left;
+	struct wl_cursor *cursor_bottom_right;
+	struct wl_cursor *csd_current_cursor;
 } Wayland;
 
 typedef struct {
@@ -189,6 +229,7 @@ static void xdgtoplevelconfigure(void *, struct xdg_toplevel *,
 		int32_t, int32_t, struct wl_array *);
 static void xdgtoplevelclose(void *, struct xdg_toplevel *);
 static void wmping(void *, struct xdg_wm_base *, uint32_t);
+static void decconfigure(void *, struct zxdg_toplevel_decoration_v1 *, uint32_t);
 
 static void wlloadfonts(char *, double);
 static void wlunloadfonts(void);
@@ -247,6 +288,7 @@ static struct wl_data_device_listener datadevlistener = { datadevoffer,
 static struct wl_data_source_listener datasrclistener = { datasrctarget,
 		datasrcsend, datasrccancelled };
 static struct wl_data_offer_listener dataofferlistener = { dataofferoffer };
+static struct zxdg_toplevel_decoration_v1_listener decorlistener = { decconfigure };
 
 /* Font Ring Cache */
 enum {
@@ -294,6 +336,12 @@ static int cursorblinks = 0;
 #endif // BLINKING_CURSOR_PATCH
 
 static int oldbutton = 3; /* button event on startup: 3 = release */
+
+static inline bool csd_visible(void) { return wl.csd_enabled && !wl.fullscreen_state; }
+static inline int csd_dx(void) { return csd_visible() ? CSD_BORDER_WIDTH : 0; }
+static inline int csd_dy(void) { return csd_visible() ? CSD_TITLEBAR_HEIGHT + CSD_BORDER_WIDTH : 0; }
+static inline int csd_extra_w(void) { return csd_visible() ? 2 * CSD_BORDER_WIDTH : 0; }
+static inline int csd_extra_h(void) { return csd_visible() ? CSD_TITLEBAR_HEIGHT + 2 * CSD_BORDER_WIDTH : 0; }
 
 void
 xbell(void)
@@ -354,7 +402,7 @@ evcol(int x)
 	#if ANYSIZE_PATCH
 	x -= win.hborderpx;
 	#else
-	x -= borderpx;
+	x -= borderpx + csd_dx();
 	#endif // ANYSIZE_PATCH
 	LIMIT(x, 0, win.tw - 1);
 	return x / win.cw;
@@ -366,7 +414,7 @@ evrow(int y)
 	#if ANYSIZE_PATCH
 	y -= win.vborderpx;
 	#else
-	y -= borderpx;
+	y -= borderpx + csd_dy();
 	#endif // ANYSIZE_PATCH
 	LIMIT(y, 0, win.th - 1);
 	return y / win.ch;
@@ -465,6 +513,10 @@ ptrenter(void *data, struct wl_pointer *pointer, uint32_t serial,
 	wl.px = wl_fixed_to_int(x);
 	wl.py = wl_fixed_to_int(y);
 
+	wl.csd_pointer_serial = serial;
+	wl.csd_pointer = pointer;
+	wl.csd_current_cursor = cursor.cursor;
+
 	wl_pointer_set_cursor(pointer, serial, cursor.surface,
 			img->hotspot_x, img->hotspot_y);
 	buffer = wl_cursor_image_get_buffer(img);
@@ -479,12 +531,85 @@ ptrleave(void *data, struct wl_pointer *pointer, uint32_t serial,
 {
 }
 
+static void
+csd_set_cursor(struct wl_cursor *new_cursor)
+{
+	if (!new_cursor || new_cursor == wl.csd_current_cursor)
+		return;
+	wl.csd_current_cursor = new_cursor;
+	struct wl_cursor_image *img = new_cursor->images[0];
+	struct wl_buffer *buffer = wl_cursor_image_get_buffer(img);
+	wl_pointer_set_cursor(wl.csd_pointer, wl.csd_pointer_serial, cursor.surface,
+			img->hotspot_x, img->hotspot_y);
+	wl_surface_attach(cursor.surface, buffer, 0, 0);
+	wl_surface_damage(cursor.surface, 0, 0, img->width, img->height);
+	wl_surface_commit(cursor.surface);
+}
+
 void
 ptrmotion(void *data, struct wl_pointer * pointer, uint32_t serial,
 		wl_fixed_t x, wl_fixed_t y)
 {
 	wl.px = wl_fixed_to_int(x);
 	wl.py = wl_fixed_to_int(y);
+
+	/* CSD: track button hovers and resize cursor */
+	if (csd_visible()) {
+		bool in_titlebar = (wl.py >= CSD_BORDER_WIDTH &&
+			wl.py < CSD_BORDER_WIDTH + CSD_TITLEBAR_HEIGHT);
+		int btns_right = CSD_BORDER_WIDTH;
+
+		/* Close button hover */
+		bool close_hov = (in_titlebar &&
+			wl.px >= win.w - btns_right - CSD_CLOSE_BTN_W);
+		/* Maximize button hover (next to close) */
+		bool max_hov = (in_titlebar &&
+			wl.px >= win.w - btns_right - CSD_CLOSE_BTN_W - CSD_MAXIMIZE_BTN_W &&
+			wl.px < win.w - btns_right - CSD_CLOSE_BTN_W);
+		/* Minimize button hover (next to maximize) */
+		bool min_hov = (in_titlebar &&
+			wl.px >= win.w - btns_right - CSD_CLOSE_BTN_W - CSD_MAXIMIZE_BTN_W - CSD_MINIMIZE_BTN_W &&
+			wl.px < win.w - btns_right - CSD_CLOSE_BTN_W - CSD_MAXIMIZE_BTN_W);
+
+		if (close_hov != wl.csd_close_hover || max_hov != wl.csd_maximize_hover ||
+				min_hov != wl.csd_minimize_hover) {
+			wl.csd_close_hover = close_hov;
+			wl.csd_maximize_hover = max_hov;
+			wl.csd_minimize_hover = min_hov;
+			wl.needdraw = true;
+		}
+
+		/* Change cursor for border resize zones */
+		bool on_top = wl.py < CSD_BORDER_WIDTH;
+		bool on_bottom = wl.py >= win.h - CSD_BORDER_WIDTH;
+		bool on_left = wl.px < CSD_BORDER_WIDTH;
+		bool on_right = wl.px >= win.w - CSD_BORDER_WIDTH;
+
+		struct wl_cursor *want = wl.cursor_default ? wl.cursor_default : cursor.cursor;
+		if (on_top && on_left && wl.cursor_top_left)
+			want = wl.cursor_top_left;
+		else if (on_top && on_right && wl.cursor_top_right)
+			want = wl.cursor_top_right;
+		else if (on_bottom && on_left && wl.cursor_bottom_left)
+			want = wl.cursor_bottom_left;
+		else if (on_bottom && on_right && wl.cursor_bottom_right)
+			want = wl.cursor_bottom_right;
+		else if (on_top && wl.cursor_top)
+			want = wl.cursor_top;
+		else if (on_bottom && wl.cursor_bottom)
+			want = wl.cursor_bottom;
+		else if (on_left && wl.cursor_left)
+			want = wl.cursor_left;
+		else if (on_right && wl.cursor_right)
+			want = wl.cursor_right;
+
+		csd_set_cursor(want);
+
+		/* Don't pass motion in CSD areas to terminal */
+		if (wl.py < csd_dy() || wl.px < csd_dx() ||
+				wl.px >= win.w - csd_dx() || wl.py >= win.h - csd_dx())
+			return;
+	}
 
 	if (IS_SET(MODE_MOUSE) && !(wl.xkb.mods & forceselmod)) {
 		wlmousereportmotion(x, y);
@@ -499,6 +624,60 @@ ptrbutton(void * data, struct wl_pointer * pointer, uint32_t serial,
 		uint32_t time, uint32_t button, uint32_t state)
 {
 	int snap;
+
+	/* CSD: handle clicks in title bar and borders */
+	if (csd_visible() && button == BTN_LEFT &&
+			state == WL_POINTER_BUTTON_STATE_PRESSED) {
+		bool in_titlebar = (wl.py >= CSD_BORDER_WIDTH &&
+				wl.py < CSD_BORDER_WIDTH + CSD_TITLEBAR_HEIGHT);
+		int btns_right = CSD_BORDER_WIDTH;
+
+		/* Close button */
+		if (in_titlebar &&
+				wl.px >= win.w - btns_right - CSD_CLOSE_BTN_W) {
+			pid_t thispid = getpid();
+			kill(thispid, SIGHUP);
+			exit(0);
+		}
+		/* Maximize button */
+		if (in_titlebar &&
+				wl.px >= win.w - btns_right - CSD_CLOSE_BTN_W - CSD_MAXIMIZE_BTN_W &&
+				wl.px < win.w - btns_right - CSD_CLOSE_BTN_W) {
+			if (wl.csd_maximized)
+				xdg_toplevel_unset_maximized(wl.xdgtoplevel);
+			else
+				xdg_toplevel_set_maximized(wl.xdgtoplevel);
+			return;
+		}
+		/* Minimize button */
+		if (in_titlebar &&
+				wl.px >= win.w - btns_right - CSD_CLOSE_BTN_W - CSD_MAXIMIZE_BTN_W - CSD_MINIMIZE_BTN_W &&
+				wl.px < win.w - btns_right - CSD_CLOSE_BTN_W - CSD_MAXIMIZE_BTN_W) {
+			xdg_toplevel_set_minimized(wl.xdgtoplevel);
+			return;
+		}
+		/* Title bar drag to move */
+		if (in_titlebar) {
+			xdg_toplevel_move(wl.xdgtoplevel, wl.seat, serial);
+			return;
+		}
+		/* Border resize */
+		if (wl.py < CSD_BORDER_WIDTH || wl.py >= win.h - CSD_BORDER_WIDTH ||
+				wl.px < CSD_BORDER_WIDTH || wl.px >= win.w - CSD_BORDER_WIDTH) {
+			uint32_t edge = 0;
+			if (wl.py < CSD_BORDER_WIDTH)
+				edge |= XDG_TOPLEVEL_RESIZE_EDGE_TOP;
+			else if (wl.py >= win.h - CSD_BORDER_WIDTH)
+				edge |= XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM;
+			if (wl.px < CSD_BORDER_WIDTH)
+				edge |= XDG_TOPLEVEL_RESIZE_EDGE_LEFT;
+			else if (wl.px >= win.w - CSD_BORDER_WIDTH)
+				edge |= XDG_TOPLEVEL_RESIZE_EDGE_RIGHT;
+			if (edge)
+				xdg_toplevel_resize(wl.xdgtoplevel, wl.seat, serial, edge);
+			return;
+		}
+	}
 
 	if (IS_SET(MODE_MOUSE) && !(wl.xkb.mods & forceselmod)) {
 		wlmousereportbutton(button, state);
@@ -982,7 +1161,7 @@ kbdrepeatinfo(void *data, struct wl_keyboard *keyboard, int32_t rate,
 		int32_t delay)
 {
 	keyrepeatdelay = delay;
-	keyrepeatinterval = 1000 / rate;
+	keyrepeatinterval = (rate > 0) ? 1000 / rate : 0;
 }
 
 void
@@ -995,14 +1174,17 @@ cresize(int width, int height)
 	if (height != 0)
 		win.h = height;
 
-	col = (win.w - 2 * borderpx) / win.cw;
-	row = (win.h - 2 * borderpx) / win.ch;
+	int content_w = win.w - csd_extra_w();
+	int content_h = win.h - csd_extra_h();
+
+	col = (content_w - 2 * borderpx) / win.cw;
+	row = (content_h - 2 * borderpx) / win.ch;
 	col = MAX(1, col);
 	row = MAX(1, row);
 
 	#if ANYSIZE_PATCH
-	win.hborderpx = (win.w - col * win.cw) / 2;
-	win.vborderpx = (win.h - row * win.ch) / 2;
+	win.hborderpx = (content_w - col * win.cw) / 2 + csd_dx();
+	win.vborderpx = (content_h - row * win.ch) / 2 + csd_dy();
 	#endif // ANYSIZE_PATCH
 
 	tresize(col, row);
@@ -1104,6 +1286,8 @@ xsettitle(char *p, int pop)
 		p = opt_title;
 	}
 	xdg_toplevel_set_title(wl.xdgtoplevel, p);
+	if (p) snprintf(wl.csd_title, sizeof(wl.csd_title), "%s", p);
+	if (csd_visible()) { wl.needdraw = true; }
 }
 
 void
@@ -1130,6 +1314,8 @@ xsettitle(char *title)
 {
 	DEFAULT(title, opt_title);
 	xdg_toplevel_set_title(wl.xdgtoplevel, title);
+	snprintf(wl.csd_title, sizeof(wl.csd_title), "%s", title);
+	if (csd_visible()) { wl.needdraw = true; }
 }
 #endif
 
@@ -1153,29 +1339,35 @@ xdgsurfconfigure(void *data, struct xdg_surface *surf, uint32_t serial)
 	xdg_surface_ack_configure(surf, serial);
 }
 
-extern bool g_fullscreen_state;
 void
 xdgtoplevelconfigure(void *data, struct xdg_toplevel *toplevel,
 		int32_t w, int32_t h, struct wl_array *states)
 {
-	g_fullscreen_state = false;
+	bool was_fullscreen = wl.fullscreen_state;
+	bool was_maximized = wl.csd_maximized;
+	wl.fullscreen_state = false;
+	wl.csd_maximized = false;
 	if (states)
 	{
 		uint32_t *state = states->data;
 		for (int i = 0; i < states->size/4; i++)
 		{
 			if (state[i] == XDG_TOPLEVEL_STATE_FULLSCREEN)
-			{
-				g_fullscreen_state = true;
-				break;
-			}
+				wl.fullscreen_state = true;
+			if (state[i] == XDG_TOPLEVEL_STATE_MAXIMIZED)
+				wl.csd_maximized = true;
 		}
 	}
 
-	if (w == win.w && h == win.h)
+	bool state_changed = (was_fullscreen != wl.fullscreen_state) ||
+		(was_maximized != wl.csd_maximized);
+
+	if (w == win.w && h == win.h && !state_changed)
 		return;
 
 	cresize(w, h);
+	if (state_changed)
+		wl.needdraw = true;
 	if (!wl.configured)
 		wl.configured = true;
 }
@@ -1191,6 +1383,18 @@ static void xdgtoplevelclose(void *data, struct xdg_toplevel *toplevel)
 static void wmping(void *data, struct xdg_wm_base *wm, uint32_t serial)
 {
 	xdg_wm_base_pong(wm, serial);
+}
+
+static void decconfigure(void *data, struct zxdg_toplevel_decoration_v1 *deco,
+		uint32_t mode)
+{
+	bool was_csd = wl.csd_enabled;
+	wl.csd_enabled = (mode == ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE);
+	if (was_csd != wl.csd_enabled) {
+		wl.needdraw = true;
+		wl.resized = true;
+		cresize(0, 0);
+	}
 }
 
 static inline uchar sixd_to_8bit(int x)
@@ -1554,6 +1758,120 @@ xfinishdraw(void)
 #endif // SIXEL_PATCH
 
 	wld_flush(wld.renderer);
+
+	/* Draw CSD decorations after terminal content, before commit */
+	if (csd_visible()) {
+		wld_set_target_buffer(wld.renderer, wld.buffer);
+
+		/* Top border */
+		wld_fill_rectangle(wld.renderer, CSD_BORDER_COLOR,
+			0, 0, win.w, CSD_BORDER_WIDTH);
+		/* Left border */
+		wld_fill_rectangle(wld.renderer, CSD_BORDER_COLOR,
+			0, CSD_BORDER_WIDTH, CSD_BORDER_WIDTH, win.h - 2 * CSD_BORDER_WIDTH);
+		/* Right border */
+		wld_fill_rectangle(wld.renderer, CSD_BORDER_COLOR,
+			win.w - CSD_BORDER_WIDTH, CSD_BORDER_WIDTH, CSD_BORDER_WIDTH,
+			win.h - 2 * CSD_BORDER_WIDTH);
+		/* Bottom border */
+		wld_fill_rectangle(wld.renderer, CSD_BORDER_COLOR,
+			0, win.h - CSD_BORDER_WIDTH, win.w, CSD_BORDER_WIDTH);
+
+		/* Title bar background */
+		wld_fill_rectangle(wld.renderer, CSD_TITLEBAR_COLOR,
+			CSD_BORDER_WIDTH, CSD_BORDER_WIDTH,
+			win.w - 2 * CSD_BORDER_WIDTH, CSD_TITLEBAR_HEIGHT);
+
+		/* Title text (centered horizontally and vertically in title bar) */
+		if (dc.font.match && wl.csd_title[0]) {
+			int text_y = CSD_BORDER_WIDTH +
+				(CSD_TITLEBAR_HEIGHT - dc.font.match->height) / 2 +
+				dc.font.match->ascent;
+			struct wld_extents title_ext;
+			wld_font_text_extents_n(dc.font.match, wl.csd_title, strlen(wl.csd_title), &title_ext);
+			int titlebar_w = win.w - 2 * CSD_BORDER_WIDTH;
+			int text_x = CSD_BORDER_WIDTH + (titlebar_w - (int)title_ext.advance) / 2;
+			if (text_x < CSD_BORDER_WIDTH + 8)
+				text_x = CSD_BORDER_WIDTH + 8;
+			wld_draw_text(wld.renderer, dc.font.match, CSD_TITLE_COLOR,
+				text_x, text_y, wl.csd_title, strlen(wl.csd_title), NULL);
+		}
+
+		int btn_y = CSD_BORDER_WIDTH;
+		int btn_text_y = CSD_BORDER_WIDTH +
+			(dc.font.match ? (CSD_TITLEBAR_HEIGHT - dc.font.match->height) / 2 +
+			dc.font.match->ascent : CSD_TITLEBAR_HEIGHT / 2);
+
+		/* Close button */
+		int close_x = win.w - CSD_BORDER_WIDTH - CSD_CLOSE_BTN_W;
+		uint32_t close_bg = wl.csd_close_hover ? CSD_CLOSE_HOVER_BG : CSD_TITLEBAR_COLOR;
+		wld_fill_rectangle(wld.renderer, close_bg,
+			close_x, btn_y, CSD_CLOSE_BTN_W, CSD_TITLEBAR_HEIGHT);
+
+		/* Draw X symbol for close button */
+		if (dc.font.match) {
+			struct wld_extents ext;
+			wld_font_text_extents_n(dc.font.match, "\xc3\x97", 2, &ext);
+			int x_x = close_x + (CSD_CLOSE_BTN_W - ext.advance) / 2;
+			wld_draw_text(wld.renderer, dc.font.match, CSD_CLOSE_COLOR,
+				x_x, btn_text_y, "\xc3\x97", 2, NULL);
+		}
+
+		/* Maximize button */
+		int max_x = close_x - CSD_MAXIMIZE_BTN_W;
+		uint32_t max_bg = wl.csd_maximize_hover ? CSD_BTN_HOVER_BG : CSD_TITLEBAR_COLOR;
+		wld_fill_rectangle(wld.renderer, max_bg,
+			max_x, btn_y, CSD_MAXIMIZE_BTN_W, CSD_TITLEBAR_HEIGHT);
+
+		/* Draw maximize/restore symbol using rectangles */
+		{
+			int icon_sz = 10;
+			int ix = max_x + (CSD_MAXIMIZE_BTN_W - icon_sz) / 2;
+			int iy = btn_y + (CSD_TITLEBAR_HEIGHT - icon_sz) / 2;
+			if (wl.csd_maximized) {
+				/* Restore icon: two overlapping rectangles */
+				int off = 3;
+				int s = icon_sz - off;
+				/* Back rectangle (offset) */
+				wld_fill_rectangle(wld.renderer, CSD_BTN_COLOR, ix + off, iy, s, 1);
+				wld_fill_rectangle(wld.renderer, CSD_BTN_COLOR, ix + off, iy, 1, s);
+				wld_fill_rectangle(wld.renderer, CSD_BTN_COLOR, ix + icon_sz - 1, iy, 1, s);
+				wld_fill_rectangle(wld.renderer, CSD_BTN_COLOR, ix + off, iy + s - 1, s, 1);
+				/* Front rectangle */
+				wld_fill_rectangle(wld.renderer, CSD_BTN_COLOR, ix, iy + off, s, 1);
+				wld_fill_rectangle(wld.renderer, CSD_BTN_COLOR, ix, iy + off, 1, s);
+				wld_fill_rectangle(wld.renderer, CSD_BTN_COLOR, ix + s - 1, iy + off, 1, s);
+				wld_fill_rectangle(wld.renderer, CSD_BTN_COLOR, ix, iy + icon_sz - 1, s, 1);
+			} else {
+				/* Maximize icon: single rectangle outline */
+				wld_fill_rectangle(wld.renderer, CSD_BTN_COLOR, ix, iy, icon_sz, 1);
+				wld_fill_rectangle(wld.renderer, CSD_BTN_COLOR, ix, iy, 1, icon_sz);
+				wld_fill_rectangle(wld.renderer, CSD_BTN_COLOR, ix + icon_sz - 1, iy, 1, icon_sz);
+				wld_fill_rectangle(wld.renderer, CSD_BTN_COLOR, ix, iy + icon_sz - 1, icon_sz, 1);
+			}
+		}
+
+		/* Minimize button */
+		int min_x = max_x - CSD_MINIMIZE_BTN_W;
+		uint32_t min_bg = wl.csd_minimize_hover ? CSD_BTN_HOVER_BG : CSD_TITLEBAR_COLOR;
+		wld_fill_rectangle(wld.renderer, min_bg,
+			min_x, btn_y, CSD_MINIMIZE_BTN_W, CSD_TITLEBAR_HEIGHT);
+
+		/* Draw minimize symbol (horizontal line) */
+		{
+			int line_w = 10;
+			int lx = min_x + (CSD_MINIMIZE_BTN_W - line_w) / 2;
+			int ly = btn_y + CSD_TITLEBAR_HEIGHT / 2;
+			wld_fill_rectangle(wld.renderer, CSD_BTN_COLOR, lx, ly, line_w, 1);
+		}
+
+		wld_flush(wld.renderer);
+		wl_surface_damage(wl.surface, 0, 0, win.w, csd_dy());
+		wl_surface_damage(wl.surface, 0, win.h - CSD_BORDER_WIDTH, win.w, CSD_BORDER_WIDTH);
+		wl_surface_damage(wl.surface, 0, 0, CSD_BORDER_WIDTH, win.h);
+		wl_surface_damage(wl.surface, win.w - CSD_BORDER_WIDTH, 0, CSD_BORDER_WIDTH, win.h);
+	}
+
 	wl_surface_attach(wl.surface, wl.buffer, 0, 0);
 	wl_surface_commit(wl.surface);
 	wl.needdraw = false;
@@ -1568,8 +1886,8 @@ void wltermclear(int col1, int row1, int col2, int row2)
 	                   win.vborderpx + row1 * win.ch, (col2 - col1 + 1) * win.cw,
 	                   (row2 - row1 + 1) * win.ch);
 	#else
-	wld_fill_rectangle(wld.renderer, color, borderpx + col1 * win.cw,
-	                   borderpx + row1 * win.ch, (col2 - col1 + 1) * win.cw,
+	wld_fill_rectangle(wld.renderer, color, borderpx + csd_dx() + col1 * win.cw,
+	                   borderpx + csd_dy() + row1 * win.ch, (col2 - col1 + 1) * win.cw,
 	                   (row2 - row1 + 1) * win.ch);
 	#endif
 }
@@ -1712,8 +2030,8 @@ static void wldrawCharacter(Glyph g, int x, int y)
   int winy = win.vborderpx + y * win.ch;
 	int width = charlen * win.cw;
 	#else
-	int winx = borderpx + x * win.cw;
-  int winy = borderpx + y * win.ch;
+	int winx = borderpx + csd_dx() + x * win.cw;
+	int winy = borderpx + csd_dy() + y * win.ch;
 	int width = charlen * win.cw;
 	#endif // ANYSIZE_PATCH
 
@@ -1733,16 +2051,16 @@ static void wldrawCharacter(Glyph g, int x, int y)
 		wlclear(winx, winy + win.ch, winx + width, win.h);
 	#else
 	if (x == 0) {
-		wlclear(0, (y == 0)? 0 : winy, borderpx,
-				((winy + win.ch >= borderpx + win.th)? win.h : (winy + win.ch)));
+		wlclear(0, (y == 0)? 0 : winy, borderpx + csd_dx(),
+				((winy + win.ch >= borderpx + csd_dy() + win.th)? win.h : (winy + win.ch)));
 	}
-	if (winx + width >= borderpx + win.tw) {
+	if (winx + width >= borderpx + csd_dx() + win.tw) {
 		wlclear(winx + width, (y == 0)? 0 : winy, win.w,
-				((winy + win.ch >= borderpx + win.th)? win.h : (winy + win.ch)));
+				((winy + win.ch >= borderpx + csd_dy() + win.th)? win.h : (winy + win.ch)));
 	}
 	if (y == 0)
-		wlclear(winx, 0, winx + width, borderpx);
-	if (winy + win.ch >= borderpx + win.th)
+		wlclear(winx, 0, winx + width, borderpx + csd_dy());
+	if (winy + win.ch >= borderpx + csd_dy() + win.th)
 		wlclear(winx, winy + win.ch, winx + width, win.h);
   #endif
 	/* Clean up the region we want to draw to. */
@@ -1863,7 +2181,7 @@ static void wldrawCharacter(Glyph g, int x, int y)
 			#if ANYSIZE_PATCH
 			xu = win.hborderpx + xu * win.cw;
 			#else
-			xu = borderpx + xu * win.cw;
+			xu = borderpx + csd_dx() + xu * win.cw;
 			#endif // ANYSIZE_PATCH
 			#if VERTCENTER_PATCH
 			XftDrawRect(xw.draw, fg, xu, winy + win.cyo + dc.font.ascent * chscale + 2, wu, 1);
@@ -1899,7 +2217,7 @@ void xdrawline(Line line, int x1, int y, int x2)
 	#if ANYSIZE_PATCH
 	wl_surface_damage(wl.surface, 0, win.vborderpx + y * win.ch, win.w, win.ch);
 	#else
-	wl_surface_damage(wl.surface, 0, borderpx + y * win.ch, win.w, win.ch);
+	wl_surface_damage(wl.surface, 0, borderpx + csd_dy() + y * win.ch, win.w, win.ch);
 	#endif
 }
 
@@ -1920,6 +2238,39 @@ static void wlloadcursor(void)
 		cursor.cursor = wl_cursor_theme_get_cursor(cursor.theme, names[i]);
 
 	cursor.surface = wl_compositor_create_surface(wl.cmp);
+
+	if (wl.csd_enabled)
+	{
+		/* Load default cursor (same as text cursor) */
+		wl.cursor_default = cursor.cursor;
+
+		/* Load resize cursors for CSD borders */
+		static const char *top_names[] = { "top_side", "n-resize", "ns-resize", NULL };
+		static const char *bottom_names[] = { "bottom_side", "s-resize", "ns-resize", NULL };
+		static const char *left_names[] = { "left_side", "w-resize", "ew-resize", NULL };
+		static const char *right_names[] = { "right_side", "e-resize", "ew-resize", NULL };
+		static const char *tl_names[] = { "top_left_corner", "nw-resize", "nwse-resize", NULL };
+		static const char *tr_names[] = { "top_right_corner", "ne-resize", "nesw-resize", NULL };
+		static const char *bl_names[] = { "bottom_left_corner", "sw-resize", "nesw-resize", NULL };
+		static const char *br_names[] = { "bottom_right_corner", "se-resize", "nwse-resize", NULL };
+
+		for (i = 0; top_names[i] && !wl.cursor_top; i++)
+			wl.cursor_top = wl_cursor_theme_get_cursor(cursor.theme, top_names[i]);
+		for (i = 0; bottom_names[i] && !wl.cursor_bottom; i++)
+			wl.cursor_bottom = wl_cursor_theme_get_cursor(cursor.theme, bottom_names[i]);
+		for (i = 0; left_names[i] && !wl.cursor_left; i++)
+			wl.cursor_left = wl_cursor_theme_get_cursor(cursor.theme, left_names[i]);
+		for (i = 0; right_names[i] && !wl.cursor_right; i++)
+			wl.cursor_right = wl_cursor_theme_get_cursor(cursor.theme, right_names[i]);
+		for (i = 0; tl_names[i] && !wl.cursor_top_left; i++)
+			wl.cursor_top_left = wl_cursor_theme_get_cursor(cursor.theme, tl_names[i]);
+		for (i = 0; tr_names[i] && !wl.cursor_top_right; i++)
+			wl.cursor_top_right = wl_cursor_theme_get_cursor(cursor.theme, tr_names[i]);
+		for (i = 0; bl_names[i] && !wl.cursor_bottom_left; i++)
+			wl.cursor_bottom_left = wl_cursor_theme_get_cursor(cursor.theme, bl_names[i]);
+		for (i = 0; br_names[i] && !wl.cursor_bottom_right; i++)
+			wl.cursor_bottom_right = wl_cursor_theme_get_cursor(cursor.theme, br_names[i]);
+	}
 }
 
 void xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
@@ -1960,10 +2311,10 @@ void xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 	  #if ANYSIZE_PATCH
 		wl_surface_damage(wl.surface, win.hborderpx + ox * win.cw,
 				win.vborderpx + oy * win.ch, win.cw, win.ch);
-    #else
-		wl_surface_damage(wl.surface, borderpx + ox * win.cw,
-				borderpx + oy * win.ch, win.cw, win.ch);
-    #endif
+		#else
+		wl_surface_damage(wl.surface, borderpx + csd_dx() + ox * win.cw,
+				borderpx + csd_dy() + oy * win.ch, win.cw, win.ch);
+		#endif
 	}
 
 	if (IS_SET(MODE_REVERSE)) {
@@ -2059,8 +2410,8 @@ void xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 						win.cw, cursorthickness);
 			  #else
 			  wld_fill_rectangle(wld.renderer, drawcol,
-					borderpx + cx * win.cw,
-					borderpx + (cy + 1) * win.ch - cursorthickness,
+					borderpx + csd_dx() + cx * win.cw,
+					borderpx + csd_dy() + (cy + 1) * win.ch - cursorthickness,
 					win.cw, cursorthickness);
 			  #endif // ANYSIZE_PATCH
 				break;
@@ -2076,9 +2427,9 @@ void xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
   					win.hborderpx + cx * win.cw,
 	  				win.vborderpx + cy * win.ch,
 		  			#else
-						borderpx + cx * win.cw,
-						borderpx + cy * win.ch,
-            #endif
+						borderpx + csd_dx() + cx * win.cw,
+						borderpx + csd_dy() + cy * win.ch,
+						#endif
 						cursorthickness, win.ch);
 				break;
 			#if BLINKING_CURSOR_PATCH
@@ -2098,8 +2449,8 @@ void xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 				win.hborderpx + cx * win.cw,
 				win.vborderpx + cy * win.ch,
 				#else
-				borderpx + cx * win.cw,
-				borderpx + cy * win.ch,
+				borderpx + csd_dx() + cx * win.cw,
+				borderpx + csd_dy() + cy * win.ch,
 				#endif // ANYSIZE_PATCH
 				win.cw - 1, 1);
 		wld_fill_rectangle(wld.renderer, drawcol,
@@ -2107,8 +2458,8 @@ void xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 				win.hborderpx + cx * win.cw,
 				win.vborderpx + cy * win.ch,
 				#else
-				borderpx + cx * win.cw,
-				borderpx + cy * win.ch,
+				borderpx + csd_dx() + cx * win.cw,
+				borderpx + csd_dy() + cy * win.ch,
 				#endif // ANYSIZE_PATCH
 				1, win.ch - 1);
 		wld_fill_rectangle(wld.renderer, drawcol,
@@ -2116,8 +2467,8 @@ void xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 				win.hborderpx + (cx + 1) * win.cw - 1,
 				win.vborderpx + cy * win.ch,
 				#else
-				borderpx + (cx + 1) * win.cw - 1,
-				borderpx + cy * win.ch,
+				borderpx + csd_dx() + (cx + 1) * win.cw - 1,
+				borderpx + csd_dy() + cy * win.ch,
 				#endif // ANYSIZE_PATCH
 				1, win.ch - 1);
 		wld_fill_rectangle(wld.renderer, drawcol,
@@ -2125,8 +2476,8 @@ void xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 				win.hborderpx + cx * win.cw,
 				win.vborderpx + (cy + 1) * win.ch - 1,
 				#else
-				borderpx + cx * win.cw,
-				borderpx + (cy + 1) * win.ch - 1,
+				borderpx + csd_dx() + cx * win.cw,
+				borderpx + csd_dy() + (cy + 1) * win.ch - 1,
 				#endif // ANYSIZE_PATCH
 				win.cw, 1);
 	}
@@ -2134,8 +2485,8 @@ void xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 	wl_surface_damage(wl.surface, win.hborderpx + cx * win.cw,
 			win.vborderpx + cy * win.ch, win.cw, win.ch);
 	#else
-	wl_surface_damage(wl.surface, borderpx + cx * win.cw,
-			borderpx + cy * win.ch, win.cw, win.ch);
+	wl_surface_damage(wl.surface, borderpx + csd_dx() + cx * win.cw,
+			borderpx + csd_dy() + cy * win.ch, win.cw, win.ch);
 	#endif
 }
 
@@ -2144,36 +2495,36 @@ regglobal(void *data, struct wl_registry *registry, uint32_t name,
 		const char *interface, uint32_t version)
 {
 	if (strcmp(interface, "wl_compositor") == 0)
-  {
+	{
 		wl.cmp = wl_registry_bind(registry, name, &wl_compositor_interface, 3);
 	}
-  else if (strcmp(interface, "xdg_wm_base") == 0)
-  {
+	else if (strcmp(interface, "xdg_wm_base") == 0)
+	{
 		wl.wm = wl_registry_bind(registry, name, &xdg_wm_base_interface, 1);
 		xdg_wm_base_add_listener(wl.wm, &wmlistener, NULL);
 	}
-  else if (strcmp(interface, "wl_shm") == 0)
-  {
+	else if (strcmp(interface, "wl_shm") == 0)
+	{
 		wl.shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
 	}
-  else if (strcmp(interface, "wl_seat") == 0)
-  {
+	else if (strcmp(interface, "wl_seat") == 0)
+	{
 		wl.seat = wl_registry_bind(registry, name, &wl_seat_interface, 4);
 	}
-  else if (strcmp(interface, "wl_data_device_manager") == 0)
-  {
+	else if (strcmp(interface, "wl_data_device_manager") == 0)
+	{
 		wl.datadevmanager = wl_registry_bind(registry, name,
 				&wl_data_device_manager_interface, 1);
 	}
-  else if (strcmp(interface, "wl_output") == 0)
-  {
+	else if (strcmp(interface, "wl_output") == 0)
+	{
 		/* bind to outputs so we can get surface enter events */
 		wl_registry_bind(registry, name, &wl_output_interface, 2);
 	}
-  else if (strcmp(interface, "zxdg_decoration_manager_v1") == 0)
-  {
+	else if (strcmp(interface, "zxdg_decoration_manager_v1") == 0)
+	{
 		wl.decoration_manager=wl_registry_bind(registry, name, &zxdg_decoration_manager_v1_interface, 1);
-  }
+	}
 }
 
 void
@@ -2258,14 +2609,14 @@ datasrccancelled(void *data, struct wl_data_source *source)
 void
 wlinit(int cols, int rows)
 {
-	struct wl_registry *registry;
+	wl.needdraw = true;
+	wl.resized = true;
+	strcpy(wl.csd_title, "st-wl");
 
 	if (!(wl.dpy = wl_display_connect(NULL)))
 		die("Can't open display\n");
 
-	wl.needdraw = true;
-  wl.resized = true;
-	registry = wl_display_get_registry(wl.dpy);
+	struct wl_registry *registry = wl_display_get_registry(wl.dpy);
 	wl_registry_add_listener(registry, &reglistener, NULL);
 	wld.ctx = wld_wayland_create_context(wl.dpy);
 	wld.renderer = wld_create_renderer(wld.ctx);
@@ -2280,8 +2631,10 @@ wlinit(int cols, int rows)
 		die("Display has no data device manager\n");
 	if (!wl.wm)
 		die("Display has no window manager\n");
-	if (!wl.decoration_manager)
-		DEBUGPRNT("# Display has no decoration manager\n");
+	if (!wl.decoration_manager) {
+		DEBUGPRNT("# Display has no decoration manager, using CSD\n");
+		wl.csd_enabled = true;
+	}
 
 	wl.keyboard = wl_seat_get_keyboard(wl.seat);
 	wl_keyboard_add_listener(wl.keyboard, &kbdlistener, NULL);
@@ -2307,26 +2660,26 @@ wlinit(int cols, int rows)
 	switch (geometry) {
 	case CellGeometry:
 		#if ANYSIZE_PATCH
-		win.w = 2 * win.hborderpx + cols * win.cw;
-		win.h = 2 * win.vborderpx + rows * win.ch;
+		win.w = 2 * win.hborderpx + cols * win.cw + csd_extra_w();
+		win.h = 2 * win.vborderpx + rows * win.ch + csd_extra_h();
 		#else
-		win.w = 2 * borderpx + cols * win.cw;
-		win.h = 2 * borderpx + rows * win.ch;
+		win.w = 2 * borderpx + cols * win.cw + csd_extra_w();
+		win.h = 2 * borderpx + rows * win.ch + csd_extra_h();
 		#endif // ANYGEOMETRY_PATCH | ANYSIZE_PATCH
 		break;
 	case PixelGeometry:
 		win.w = cols;
 		win.h = rows;
-		cols = (win.w - 2 * borderpx) / win.cw;
-		rows = (win.h - 2 * borderpx) / win.ch;
+		cols = (win.w - 2 * borderpx - csd_extra_w()) / win.cw;
+		rows = (win.h - 2 * borderpx - csd_extra_h()) / win.ch;
 		break;
 	}
 	#elif ANYSIZE_PATCH
-	win.w = 2 * win.hborderpx + cols * win.cw;
-	win.h = 2 * win.vborderpx + rows * win.ch;
+	win.w = 2 * win.hborderpx + cols * win.cw + csd_extra_w();
+	win.h = 2 * win.vborderpx + rows * win.ch + csd_extra_h();
 	#else
-	win.w = 2 * borderpx + cols * win.cw;
-	win.h = 2 * borderpx + rows * win.ch;
+	win.w = 2 * borderpx + cols * win.cw + csd_extra_w();
+	win.h = 2 * borderpx + rows * win.ch + csd_extra_h();
 	#endif // ANYGEOMETRY_PATCH | ANYSIZE_PATCH
 
 	wl.surface = wl_compositor_create_surface(wl.cmp);
@@ -2339,11 +2692,12 @@ wlinit(int cols, int rows)
 	xdg_toplevel_set_app_id(wl.xdgtoplevel, opt_class ? opt_class : termclass);
 
 #if !NO_WINDOW_DECORATIONS_PATCH
-  if (wl.decoration_manager)
-  {
-    struct zxdg_toplevel_decoration_v1 *decoration = zxdg_decoration_manager_v1_get_toplevel_decoration(wl.decoration_manager, wl.xdgtoplevel);
-    zxdg_toplevel_decoration_v1_set_mode(decoration, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
-  }
+	if (wl.decoration_manager)
+	{
+		wl.csd_decoration = zxdg_decoration_manager_v1_get_toplevel_decoration(wl.decoration_manager, wl.xdgtoplevel);
+		zxdg_toplevel_decoration_v1_add_listener(wl.csd_decoration, &decorlistener, NULL);
+		zxdg_toplevel_decoration_v1_set_mode(wl.csd_decoration, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+	}
 #endif
 
 	wl_surface_commit(wl.surface);
@@ -2399,11 +2753,29 @@ run(void)
 
 		drawtimeout.tv_nsec = 1000000 * timeout;
 
+		/* Dispatch any already-queued wayland events before blocking */
+		wl_display_dispatch_pending(wl.dpy);
+		if (wl_display_flush(wl.dpy) == -1 && errno != EAGAIN)
+			break;
+
+		/* Prepare for non-blocking read: must be done before pselect */
+		while (wl_display_prepare_read(wl.dpy) != 0)
+			wl_display_dispatch_pending(wl.dpy);
+
 		if (pselect(MAX(wlfd, ttyfd)+1, &rfd, NULL, NULL, &drawtimeout, NULL) < 0) {
+			wl_display_cancel_read(wl.dpy);
 			if (errno == EINTR)
 				continue;
 			die("select failed: %s\n", strerror(errno));
 		}
+
+		if (FD_ISSET(wlfd, &rfd))
+			wl_display_read_events(wl.dpy);
+		else
+			wl_display_cancel_read(wl.dpy);
+
+		/* Dispatch any events that were read */
+		wl_display_dispatch_pending(wl.dpy);
 
 		#if SYNC_PATCH
 		int ttyin = FD_ISSET(ttyfd, &rfd) || ttyread_pending();
@@ -2415,10 +2787,39 @@ run(void)
 			ttyread();
 		}
 
-		if (FD_ISSET(wlfd, &rfd))
-			wl_display_dispatch(wl.dpy);
-
 		clock_gettime(CLOCK_MONOTONIC, &now);
+
+		/* Process key repeat before drawing delay to prevent starvation */
+		if (repeat.len > 0 && keyrepeatinterval > 0)
+		{
+			long timeDiff = TIMEDIFF(now, repeat.last);
+			if ( !repeat.started)
+			{
+				if (timeDiff >= keyrepeatdelay)
+				{
+					repeat.started = true;
+					repeat.last = now;
+					ttywrite(repeat.str, repeat.len, 1);
+					win.mode |= MODE_BLINK; // during repeat, disable blinking
+					tsetdirtattr(ATTR_BLINK);
+					lastblink = now;
+					wlneeddraw();
+				}
+			}
+			else
+			{
+				if (timeDiff >= keyrepeatinterval)
+				{
+					repeat.last = now;
+					ttywrite(repeat.str, repeat.len, 1);
+					win.mode |= MODE_BLINK; // during repeat, disable blinking
+					tsetdirtattr(ATTR_BLINK);
+					lastblink = now;
+					wlneeddraw();
+				}
+			}
+		}
+
 
 		/*
 		 * To reduce flicker and tearing, when new content or event
@@ -2444,6 +2845,15 @@ run(void)
 			timeout = (maxlatency - TIMEDIFF(now, trigger));
 			if (timeout > 0)
       {
+				if (repeat.len > 0 && keyrepeatinterval > 0) {
+					long rep_timeout;
+					if (!repeat.started)
+						rep_timeout = keyrepeatdelay - TIMEDIFF(now, repeat.last);
+					else
+						rep_timeout = keyrepeatinterval - TIMEDIFF(now, repeat.last);
+					if (rep_timeout < timeout)
+						timeout = rep_timeout;
+				}
 				continue;  /* we have time, try to find idle */
       }
 		}
@@ -2458,6 +2868,15 @@ run(void)
 			 * SU-timeout even without new content.
 			 */
 			timeout = minlatency;
+			if (repeat.len > 0 && keyrepeatinterval > 0) {
+				long rep_timeout;
+				if (!repeat.started)
+					rep_timeout = keyrepeatdelay - TIMEDIFF(now, repeat.last);
+				else
+					rep_timeout = keyrepeatinterval - TIMEDIFF(now, repeat.last);
+				if (rep_timeout < timeout)
+					timeout = rep_timeout;
+			}
 			continue;
 		}
 		#endif // SYNC_PATCH
@@ -2484,44 +2903,16 @@ run(void)
 			}
 		}
 
-		if (repeat.len > 0)
+		/* Set timeout for next repeat */
+		if (repeat.len > 0 && keyrepeatinterval > 0)
 		{
-			long timeDiff = TIMEDIFF(now, repeat.last);
-			if ( !repeat.started)
-			{
-				if (timeDiff >= keyrepeatdelay)
-				{
-					repeat.started = true;
-					timeout = keyrepeatinterval;
-					repeat.last = now;
-					ttywrite(repeat.str, repeat.len, 1);
-					win.mode |= MODE_BLINK; // during repeat, disable blinking
-					tsetdirtattr(ATTR_BLINK);
-					lastblink = now;
-					wlneeddraw();
-				}
-				else
-				{
-					timeout = keyrepeatdelay - timeDiff;
-				}
-			}
+			long rep_timeout;
+			if (!repeat.started)
+				rep_timeout = keyrepeatdelay - TIMEDIFF(now, repeat.last);
 			else
-			{
-				if (timeDiff >= keyrepeatinterval)
-				{
-					repeat.last = now;
-					timeout = keyrepeatinterval;
-					ttywrite(repeat.str, repeat.len, 1);
-					win.mode |= MODE_BLINK; // during repeat, disable blinking
-					tsetdirtattr(ATTR_BLINK);
-					lastblink = now;
-					wlneeddraw();
-				}
-				else
-				{
-					timeout = keyrepeatinterval - timeDiff;
-				}
-			}
+				rep_timeout = keyrepeatinterval - TIMEDIFF(now, repeat.last);
+			if (rep_timeout < timeout)
+				timeout = rep_timeout;
 		}
 
 		if (!wl.needdraw)
