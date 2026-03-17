@@ -146,6 +146,7 @@ typedef struct {
 	/* CSD cursor types */
 	struct wl_cursor *cursor_default;
 	struct wl_cursor *cursor_top;
+	struct wl_cursor *cursor_topbar;
 	struct wl_cursor *cursor_bottom;
 	struct wl_cursor *cursor_left;
 	struct wl_cursor *cursor_right;
@@ -602,6 +603,13 @@ ptrmotion(void *data, struct wl_pointer * pointer, uint32_t serial,
 			want = wl.cursor_left;
 		else if (on_right && wl.cursor_right)
 			want = wl.cursor_right;
+		else
+		{
+			bool in_titlebar = (wl.py >= CSD_BORDER_WIDTH &&
+			                    wl.py < CSD_BORDER_WIDTH + CSD_TITLEBAR_HEIGHT);
+			if (in_titlebar && wl.cursor_topbar)
+				want = wl.cursor_topbar;
+		}
 
 		csd_set_cursor(want);
 
@@ -2253,6 +2261,7 @@ static void wlloadcursor(void)
 		static const char *tr_names[] = { "top_right_corner", "ne-resize", "nesw-resize", NULL };
 		static const char *bl_names[] = { "bottom_left_corner", "sw-resize", "nesw-resize", NULL };
 		static const char *br_names[] = { "bottom_right_corner", "se-resize", "nwse-resize", NULL };
+		static const char *topbar_names[] = { "left_ptr", NULL };
 
 		for (i = 0; top_names[i] && !wl.cursor_top; i++)
 			wl.cursor_top = wl_cursor_theme_get_cursor(cursor.theme, top_names[i]);
@@ -2270,6 +2279,8 @@ static void wlloadcursor(void)
 			wl.cursor_bottom_left = wl_cursor_theme_get_cursor(cursor.theme, bl_names[i]);
 		for (i = 0; br_names[i] && !wl.cursor_bottom_right; i++)
 			wl.cursor_bottom_right = wl_cursor_theme_get_cursor(cursor.theme, br_names[i]);
+		for (i = 0; topbar_names[i] && !wl.cursor_topbar; i++)
+			wl.cursor_topbar = wl_cursor_theme_get_cursor(cursor.theme, topbar_names[i]);
 	}
 }
 
