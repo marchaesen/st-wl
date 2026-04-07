@@ -1139,6 +1139,9 @@ tsetdirt(int top, int bot)
 {
 	int i;
 
+	if (term.row <= 0)
+		return;
+
 	LIMIT(top, 0, term.row-1);
 	LIMIT(bot, 0, term.row-1);
 
@@ -3403,6 +3406,7 @@ eschandle(uchar ascii)
 		resettitle();
 		xloadcols();
 		xsetmode(0, MODE_HIDE);
+		xsetmode(0, MODE_BRCKTPASTE);
 		#if SCROLLBACK_PATCH && !REFLOW_PATCH
 		if (!IS_SET(MODE_ALTSCREEN)) {
 			term.scr = 0;
