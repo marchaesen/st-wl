@@ -1653,8 +1653,12 @@ tclearregion(int x1, int y1, int x2, int y2)
 		term.dirty[y] = 1;
 		for (x = x1; x <= x2; x++) {
 			gp = &term.line[y][x];
-			if (selected(x, y))
+			/* skip the clear if the cell is already blank - avoids
+			 * nuking a selection on a redundant no-op redraw */
+			if (selected(x, y) && (gp->u != ' ' || (gp->mode & ~ATTR_IGNOREMASK) != 0 ||
+					gp->fg != term.c.attr.fg || gp->bg != term.c.attr.bg)) {
 				selclear();
+			}
 			gp->fg = term.c.attr.fg;
 			gp->bg = term.c.attr.bg;
 			gp->mode = 0;
@@ -3578,8 +3582,18 @@ check_control_code:
 	if (selected(term.c.x, term.c.y + term.scr))
 		selclear();
 	#else
-	if (selected(term.c.x, term.c.y))
-		selclear();
+	if (selected(term.c.x, term.c.y)) {
+		Glyph *ogp = &term.line[term.c.y][term.c.x];
+		/*
+		 * Multiplexers (tmux) frequently re-send the exact same
+		 * character/attributes already on screen - e.g. reasserting
+		 * the cursor cell on a pane focus switch. Treat that as a
+		 * no-op instead of clearing an active selection; only clear
+		 * it when the content actually changes.
+		 */
+		if (ogp->u != u || ATTRCMP(*ogp, term.c.attr))
+			selclear();
+	}
 	#endif // REFLOW_PATCH
 
 	gp = &term.line[term.c.y][term.c.x];

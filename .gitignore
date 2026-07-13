@@ -8,5 +8,7 @@ compile_commands.json
 xdg-shell-client-protocol.h
 xdg-decoration-protocol.c
 xdg-decoration-protocol.h
+primary-selection-protocol.c
+primary-selection-client-protocol.h
 options
 .deps

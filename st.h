@@ -29,14 +29,25 @@
 #define DIVCEIL(n, d)		(((n) + ((d) - 1)) / (d))
 #define DEFAULT(a, b)		(a) = (a) ? (a) : (b)
 #define LIMIT(x, a, b)		(x) = (x) < (a) ? (a) : (x) > (b) ? (b) : (x)
-#if LIGATURES_PATCH
-#define ATTRCMP(a, b)		(((a).mode & (~ATTR_WRAP) & (~ATTR_LIGA)) != ((b).mode & (~ATTR_WRAP) & (~ATTR_LIGA)) || \
+/*
+ * Bits that are pure internal bookkeeping (line-wrap continuation,
+ * ligature linkage, the undercurl "did the underline style/color
+ * change" toggle) rather than a visible difference in the glyph -
+ * excluded from ATTRCMP so a no-op rewrite of unchanged content
+ * doesn't look like a real change.
+ */
+#if LIGATURES_PATCH && UNDERCURL_PATCH
+#define ATTR_IGNOREMASK		(ATTR_WRAP | ATTR_LIGA | ATTR_DIRTYUNDERLINE)
+#elif LIGATURES_PATCH
+#define ATTR_IGNOREMASK		(ATTR_WRAP | ATTR_LIGA)
+#elif UNDERCURL_PATCH
+#define ATTR_IGNOREMASK		(ATTR_WRAP | ATTR_DIRTYUNDERLINE)
+#else
+#define ATTR_IGNOREMASK		(ATTR_WRAP)
+#endif // LIGATURES_PATCH | UNDERCURL_PATCH
+#define ATTRCMP(a, b)		(((a).mode & ~ATTR_IGNOREMASK) != ((b).mode & ~ATTR_IGNOREMASK) || \
 				(a).fg != (b).fg || \
 				(a).bg != (b).bg)
-#else
-#define ATTRCMP(a, b)		((a).mode != (b).mode || (a).fg != (b).fg || \
-				(a).bg != (b).bg)
-#endif // LIGATURES_PATCH
 #define TIMEDIFF(t1, t2)	((t1.tv_sec-t2.tv_sec)*1000 + \
 				(t1.tv_nsec-t2.tv_nsec)/1000000)
 #define MODBIT(x, set, bit)	((set) ? ((x) |= (bit)) : ((x) &= ~(bit)))

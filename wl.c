@@ -28,6 +28,7 @@ char *argv0;
 #include "win.h"
 #include "xdg-shell-client-protocol.h"
 #include "xdg-decoration-protocol.h"
+#include "primary-selection-client-protocol.h"
 
 static char *font = "JetBrainsMono Nerd Font:antialias=true:autohint=true";
 
@@ -116,6 +117,9 @@ typedef struct {
 	struct wl_data_device_manager *datadevmanager;
 	struct wl_data_device *datadev;
 	struct wl_data_offer *seloffer;
+	struct zwp_primary_selection_device_manager_v1 *primseldevmanager;
+	struct zwp_primary_selection_device_v1 *primseldev;
+	struct zwp_primary_selection_offer_v1 *primseloffer;
 	struct wl_surface *surface;
 	struct wl_buffer *buffer;
 	struct xdg_wm_base *wm;
@@ -165,6 +169,11 @@ typedef struct {
 } WlSelection;
 
 typedef struct {
+	struct zwp_primary_selection_source_v1 *source;
+	char *text;
+} WlPrimSelection;
+
+typedef struct {
 	struct wl_cursor_theme *theme;
 	struct wl_cursor *cursor;
 	struct wl_surface *surface;
@@ -203,8 +212,10 @@ static void ptrbutton(void *, struct wl_pointer *, uint32_t, uint32_t,
 static void ptraxis(void *, struct wl_pointer *, uint32_t, uint32_t,
 		wl_fixed_t);
 static void mousesel(int);
-static void wlselpaste(void);
+static void wlclippaste(void);
+static void wlprimselpaste(void);
 static void setsel(char*, uint32_t);
+static void setprimsel(char*, uint32_t);
 static inline void selwritebuf(char *, int);
 
 static int match(uint, uint);
@@ -254,6 +265,16 @@ static void datasrcsend(void *, struct wl_data_source *, const char *,
 		int32_t);
 static void datasrccancelled(void *, struct wl_data_source *);
 
+static void primseldevoffer(void *, struct zwp_primary_selection_device_v1 *,
+		struct zwp_primary_selection_offer_v1 *);
+static void primseldevselection(void *, struct zwp_primary_selection_device_v1 *,
+		struct zwp_primary_selection_offer_v1 *);
+static void primseloffer(void *, struct zwp_primary_selection_offer_v1 *,
+		const char *);
+static void primselsrcsend(void *, struct zwp_primary_selection_source_v1 *,
+		const char *, int32_t);
+static void primselsrccancelled(void *, struct zwp_primary_selection_source_v1 *);
+
 static void wlinit(int, int);
 static void run(void);
 static void usage(void);
@@ -262,6 +283,7 @@ static void usage(void);
 DC dc;
 static Wayland wl;
 static WlSelection wlsel;
+static WlPrimSelection wlprimsel;
 TermWindow win;
 static WLD wld;
 static Cursor cursor;
@@ -289,6 +311,12 @@ static struct wl_data_device_listener datadevlistener = { datadevoffer,
 static struct wl_data_source_listener datasrclistener = { datasrctarget,
 		datasrcsend, datasrccancelled };
 static struct wl_data_offer_listener dataofferlistener = { dataofferoffer };
+static struct zwp_primary_selection_device_v1_listener primseldevlistener = {
+		primseldevoffer, primseldevselection };
+static struct zwp_primary_selection_offer_v1_listener primselofferlistener = {
+		primseloffer };
+static struct zwp_primary_selection_source_v1_listener primselsrclistener = {
+		primselsrcsend, primselsrccancelled };
 static struct zxdg_toplevel_decoration_v1_listener decorlistener = { decconfigure };
 
 /* Font Ring Cache */
@@ -688,6 +716,11 @@ ptrbutton(void * data, struct wl_pointer * pointer, uint32_t serial,
 	}
 
 	if (IS_SET(MODE_MOUSE) && !(wl.xkb.mods & forceselmod)) {
+		/* starting a new click elsewhere should drop any existing
+		 * native selection, same as selstart() does for the
+		 * non-mouse-mode path */
+		if (button == BTN_LEFT && state == WL_POINTER_BUTTON_STATE_PRESSED)
+			selclear();
 		wlmousereportbutton(button, state);
 		return;
 	}
@@ -698,8 +731,7 @@ ptrbutton(void * data, struct wl_pointer * pointer, uint32_t serial,
 	#if CLIPBOARD_PATCH
 	      clippaste(NULL);
 	#else
-				wlselpaste();
-	{ BTN_MIDDLE, MOD_MASK_ANY, "", selpaste},
+				wlprimselpaste();
 	#endif // CLIPBOARD_PATCH
 			} else if (button == BTN_LEFT) {
 				wl.globalserial = serial;
@@ -765,8 +797,14 @@ mousesel(int done)
 	}
 
 	selextend(evcol(wl.px), evrow(wl.py), seltype, done);
-	if (done)
-		setsel(getsel(), wl.globalserial);
+	if (done) {
+		char *str = getsel();
+		setprimsel(str, wl.globalserial);
+		#if CLIPBOARD_PATCH
+		if (str)
+			setsel(xstrdup(str), wl.globalserial);
+		#endif // CLIPBOARD_PATCH
+	}
 }
 
 
@@ -791,6 +829,37 @@ setsel(char *str, uint32_t serial)
 }
 
 void
+setprimsel(char *str, uint32_t serial)
+{
+	if (!str)
+		return;
+
+	if (!wl.primseldevmanager) {
+		/* Compositor has no primary-selection support (e.g. GNOME/Mutter);
+		 * fall back to the clipboard so selecting text still copies it. */
+		setsel(str, serial);
+		return;
+	}
+
+	free(wlprimsel.text);
+	wlprimsel.text = str;
+
+	wlprimsel.source = zwp_primary_selection_device_manager_v1_create_source(
+			wl.primseldevmanager);
+	zwp_primary_selection_source_v1_add_listener(wlprimsel.source,
+			&primselsrclistener, NULL);
+	zwp_primary_selection_source_v1_offer(wlprimsel.source, "text/plain");
+	zwp_primary_selection_source_v1_offer(wlprimsel.source,
+			"text/plain;charset=utf-8");
+	zwp_primary_selection_source_v1_offer(wlprimsel.source, "TEXT");
+	zwp_primary_selection_source_v1_offer(wlprimsel.source, "STRING");
+	zwp_primary_selection_source_v1_offer(wlprimsel.source, "UTF8_STRING");
+	zwp_primary_selection_device_v1_set_selection(wl.primseldev,
+			wlprimsel.source, serial);
+	wl_display_roundtrip(wl.dpy);
+}
+
+void
 selwritebuf(char *buf, int len)
 {
 	char *repl = buf;
@@ -810,7 +879,7 @@ selwritebuf(char *buf, int len)
 }
 
 void
-wlselpaste(void)
+wlclippaste(void)
 {
 	int fds[2], len, left;
 	char buf[BUFSIZ], *str;
@@ -845,6 +914,49 @@ wlselpaste(void)
 	}
 }
 
+void
+wlprimselpaste(void)
+{
+	int fds[2], len, left;
+	char buf[BUFSIZ], *str;
+
+	if (!wl.primseldevmanager) {
+		/* no primary-selection support; the clipboard stood in for it */
+		wlclippaste();
+		return;
+	}
+
+	if (wl.primseloffer) {
+		if (IS_SET(MODE_BRCKTPASTE))
+			ttywrite("\033[200~", 6, 0);
+		/* check if we are pasting from ourselves */
+		if (wlprimsel.text) {
+			str = wlprimsel.text;
+			left = strlen(wlprimsel.text);
+			while (left > 0) {
+				len = MIN(sizeof buf, left);
+				memcpy(buf, str, len);
+				selwritebuf(buf, len);
+				left -= len;
+				str += len;
+			}
+		} else {
+			if (-1==pipe(fds))
+				fprintf(stderr, "Error creating pipe");
+			zwp_primary_selection_offer_v1_receive(wl.primseloffer,
+					"text/plain", fds[1]);
+			wl_display_flush(wl.dpy);
+			close(fds[1]);
+			while ((len = read(fds[0], buf, sizeof buf)) > 0) {
+				selwritebuf(buf, len);
+			}
+			close(fds[0]);
+		}
+		if (IS_SET(MODE_BRCKTPASTE))
+			ttywrite("\033[201~", 6, 0);
+	}
+}
+
 #include "patch/x_include.c"
 
 void
@@ -862,18 +974,24 @@ clipcopy(const Arg * dummy)
 void
 clippaste(const Arg * dummy)
 {
-	wlselpaste();
+	wlclippaste();
 }
 
 void
 selpaste(const Arg * dummy)
 {
-	wlselpaste();
+	wlprimselpaste();
 }
 
 void
 xsetsel(char * buf)
 {
+	/*
+	 * OSC 52 sets the *clipboard* selection (that is how tmux's
+	 * set-clipboard integration copies out). Route it there - the
+	 * following xclipcopy() in the OSC 52 handler is a no-op here
+	 * because getsel() has no on-screen selection to read.
+	 */
 	setsel(buf, wl.globalserial);
 }
 
@@ -2527,6 +2645,11 @@ regglobal(void *data, struct wl_registry *registry, uint32_t name,
 		wl.datadevmanager = wl_registry_bind(registry, name,
 				&wl_data_device_manager_interface, 1);
 	}
+	else if (strcmp(interface, "zwp_primary_selection_device_manager_v1") == 0)
+	{
+		wl.primseldevmanager = wl_registry_bind(registry, name,
+				&zwp_primary_selection_device_manager_v1_interface, 1);
+	}
 	else if (strcmp(interface, "wl_output") == 0)
 	{
 		/* bind to outputs so we can get surface enter events */
@@ -2612,9 +2735,66 @@ datasrccancelled(void *data, struct wl_data_source *source)
 		wlsel.source = NULL;
 		free(wlsel.primary);
 		wlsel.primary = NULL;
-		selclear();
+		/*
+		 * Losing clipboard ownership (e.g. because an unrelated tmux
+		 * pane emitted an OSC 52 clipboard-set, or another app copied
+		 * something) must not blow away the on-screen selection - that
+		 * is what the primary selection is for. Only fall back to
+		 * clearing it here when there is no primary-selection support
+		 * and the clipboard is standing in for it (see setprimsel).
+		 */
+		if (!wl.primseldevmanager)
+			selclear();
 	}
 	wl_data_source_destroy(source);
+}
+
+void
+primseldevoffer(void *data, struct zwp_primary_selection_device_v1 *dev,
+		struct zwp_primary_selection_offer_v1 *offer)
+{
+	zwp_primary_selection_offer_v1_add_listener(offer, &primselofferlistener,
+			NULL);
+}
+
+void
+primseldevselection(void *data, struct zwp_primary_selection_device_v1 *dev,
+		struct zwp_primary_selection_offer_v1 *offer)
+{
+	if (offer && (uintptr_t) zwp_primary_selection_offer_v1_get_user_data(offer) == 1)
+		wl.primseloffer = offer;
+	else
+		wl.primseloffer = NULL;
+}
+
+void
+primseloffer(void *data, struct zwp_primary_selection_offer_v1 *offer,
+		const char *mimetype)
+{
+	/* mark the offer as usable if it supports plain text */
+	if (strncmp(mimetype, "text/plain", 10) == 0)
+		zwp_primary_selection_offer_v1_set_user_data(offer, (void *)(uintptr_t) 1);
+}
+
+void
+primselsrcsend(void *data, struct zwp_primary_selection_source_v1 *source,
+		const char *mimetype, int32_t fd)
+{
+	if (wlprimsel.text)
+		write(fd, wlprimsel.text, strlen(wlprimsel.text));
+	close(fd);
+}
+
+void
+primselsrccancelled(void *data, struct zwp_primary_selection_source_v1 *source)
+{
+	if (wlprimsel.source == source) {
+		wlprimsel.source = NULL;
+		free(wlprimsel.text);
+		wlprimsel.text = NULL;
+		selclear();
+	}
+	zwp_primary_selection_source_v1_destroy(source);
 }
 
 void
@@ -2654,6 +2834,16 @@ wlinit(int cols, int rows)
 	wl.datadev = wl_data_device_manager_get_data_device(wl.datadevmanager,
 			wl.seat);
 	wl_data_device_add_listener(wl.datadev, &datadevlistener, NULL);
+
+	if (wl.primseldevmanager) {
+		wl.primseldev = zwp_primary_selection_device_manager_v1_get_device(
+				wl.primseldevmanager, wl.seat);
+		zwp_primary_selection_device_v1_add_listener(wl.primseldev,
+				&primseldevlistener, NULL);
+	} else {
+		DEBUGPRNT("# Display has no primary selection support, "
+				"falling back to clipboard for text selection\n");
+	}
 
 	/* font */
 	if (!FcInit())

@@ -13,6 +13,7 @@ PKG_CONFIG = pkg-config
 PKGCFG = fontconfig wayland-client wayland-cursor xkbcommon pixman-1
 XDG_SHELL_PROTO = `$(PKG_CONFIG) --variable=pkgdatadir wayland-protocols`/stable/xdg-shell/xdg-shell.xml
 XDG_DECORATION_PROTO = `$(PKG_CONFIG) --variable=pkgdatadir wayland-protocols`/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml
+PRIMARY_SELECTION_PROTO = `$(PKG_CONFIG) --variable=pkgdatadir wayland-protocols`/unstable/primary-selection/primary-selection-unstable-v1.xml
 
 PKG_CONFIG = pkg-config
 

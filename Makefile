@@ -16,7 +16,7 @@ ifdef DEBUG
 DEBUGFLAGS=-O0 -g -DDEBUG
 endif
 
-SRC = st.c wl.c xdg-shell-protocol.c xdg-decoration-protocol.c $(SIXEL_C) $(LIGATURES_C)
+SRC = st.c wl.c xdg-shell-protocol.c xdg-decoration-protocol.c primary-selection-protocol.c $(SIXEL_C) $(LIGATURES_C)
 OBJ = $(SRC:%.c=.objects/%.o)
 DEP = $(SRC:%.c=.deps/%.d)
 
@@ -51,6 +51,14 @@ xdg-decoration-protocol.h:
 	@echo GEN $@
 	@wayland-scanner client-header $(XDG_DECORATION_PROTO) $@
 
+primary-selection-protocol.c:
+	@echo GEN $@
+	@wayland-scanner private-code $(PRIMARY_SELECTION_PROTO) $@
+
+primary-selection-client-protocol.h:
+	@echo GEN $@
+	@wayland-scanner client-header $(PRIMARY_SELECTION_PROTO) $@
+
 ifeq ($(if $(V),$(V),0), 0)
     define quiet
 			@echo "  $1 $(notdir $(<:%.c=.objects/%.o))"
@@ -72,7 +80,7 @@ endif
 .objects/%.o .deps/%.d: %.c | .deps .objects
 	$(call quiet,CC) $(STCFLAGS) -c $< -o .objects/$*.o -MMD -MP -MF .deps/$*.d -MT .objects/$*.o
 
-.objects/wl.o: xdg-shell-client-protocol.h xdg-decoration-protocol.h
+.objects/wl.o: xdg-shell-client-protocol.h xdg-decoration-protocol.h primary-selection-client-protocol.h
 
 $(OBJ): config.h config.mk patches.h
 
