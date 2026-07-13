@@ -882,15 +882,20 @@ void
 wlclippaste(void)
 {
 	int fds[2], len, left;
-	char buf[BUFSIZ], *str;
+	char buf[BUFSIZ], *str, *copy;
 
 	if (wl.seloffer) {
 		if (IS_SET(MODE_BRCKTPASTE))
 			ttywrite("\033[200~", 6, 0);
 		/* check if we are pasting from ourselves */
 		if (wlsel.primary) {
-			str = wlsel.primary;
-			left = strlen(wlsel.primary);
+			/*
+			 * selwritebuf -> ttywrite may reenter ttyread, whose
+			 * output handling (e.g. OSC 52) can free wlsel.primary
+			 * mid-loop; paste from a private copy instead.
+			 */
+			copy = str = xstrdup(wlsel.primary);
+			left = strlen(str);
 			while (left > 0) {
 				len = MIN(sizeof buf, left);
 				memcpy(buf, str, len);
@@ -898,6 +903,7 @@ wlclippaste(void)
 				left -= len;
 				str += len;
 			}
+			free(copy);
 		} else {
 			if (-1==pipe(fds))
 				fprintf(stderr, "Error creating pipe");
@@ -918,7 +924,7 @@ void
 wlprimselpaste(void)
 {
 	int fds[2], len, left;
-	char buf[BUFSIZ], *str;
+	char buf[BUFSIZ], *str, *copy;
 
 	if (!wl.primseldevmanager) {
 		/* no primary-selection support; the clipboard stood in for it */
@@ -931,8 +937,13 @@ wlprimselpaste(void)
 			ttywrite("\033[200~", 6, 0);
 		/* check if we are pasting from ourselves */
 		if (wlprimsel.text) {
-			str = wlprimsel.text;
-			left = strlen(wlprimsel.text);
+			/*
+			 * selwritebuf -> ttywrite may reenter ttyread, whose
+			 * output handling can trigger a roundtrip that frees
+			 * wlprimsel.text mid-loop; paste from a private copy.
+			 */
+			copy = str = xstrdup(wlprimsel.text);
+			left = strlen(str);
 			while (left > 0) {
 				len = MIN(sizeof buf, left);
 				memcpy(buf, str, len);
@@ -940,6 +951,7 @@ wlprimselpaste(void)
 				left -= len;
 				str += len;
 			}
+			free(copy);
 		} else {
 			if (-1==pipe(fds))
 				fprintf(stderr, "Error creating pipe");
