@@ -976,15 +976,49 @@ ttynew(const char *line, char *cmd, const char *out, char **args)
 size_t
 ttyread(void)
 {
-	static char buf[BUFSIZ];
-	static int buflen = 0;
+	static char *buf = NULL;
+	static int buflen = 0, bufsize = 0;
+	static char *pending = NULL;
+	static int pendinglen = 0, pendingsize = 0;
+	static bool intwrite = false;
 	int ret, written;
+
+	/*
+	 * ttywriteraw() drains the tty from inside its write loop, so pasting
+	 * a large block can reenter ttyread() while the twrite() below is
+	 * still walking buf. A nested call must neither reparse the bytes
+	 * twrite() still owns nor move buf around underneath it, so it only
+	 * parks what it reads; the outer call picks it up afterwards, which
+	 * keeps the stream in order.
+	 */
+	if (intwrite) {
+		if (pendinglen == pendingsize) {
+			pendingsize = MAX(2 * pendingsize, BUFSIZ);
+			pending = xrealloc(pending, pendingsize);
+		}
+		ret = read(cmdfd, pending+pendinglen, pendingsize-pendinglen);
+		switch (ret) {
+		case 0:
+			exit(0);
+		case -1:
+			die("couldn't read from shell: %s\n", strerror(errno));
+		default:
+			pendinglen += ret;
+			return ret;
+		}
+	}
+
+	/* never read with a zero-sized rest, read() would report a false EOF */
+	if (buflen == bufsize) {
+		bufsize = MAX(2 * bufsize, BUFSIZ);
+		buf = xrealloc(buf, bufsize);
+	}
 
 	/* append read bytes to unprocessed bytes */
 	#if SYNC_PATCH
-	ret = twrite_aborted ? 1 : read(cmdfd, buf+buflen, LEN(buf)-buflen);
+	ret = twrite_aborted ? 1 : read(cmdfd, buf+buflen, bufsize-buflen);
 	#else
-	ret = read(cmdfd, buf+buflen, LEN(buf)-buflen);
+	ret = read(cmdfd, buf+buflen, bufsize-buflen);
 	#endif // SYNC_PATCH
 
 	switch (ret) {
@@ -998,11 +1032,24 @@ ttyread(void)
 		#else
 		buflen += ret;
 		#endif // SYNC_PATCH
+		intwrite = true;
 		written = twrite(buf, buflen, 0);
+		intwrite = false;
 		buflen -= written;
 		/* keep any incomplete UTF-8 byte sequence for the next call */
 		if (buflen > 0)
 			memmove(buf, buf + written, buflen);
+
+		/* take over whatever a nested ttyread() parked meanwhile */
+		if (pendinglen > 0) {
+			if (buflen + pendinglen > bufsize) {
+				bufsize = buflen + pendinglen;
+				buf = xrealloc(buf, bufsize);
+			}
+			memcpy(buf + buflen, pending, pendinglen);
+			buflen += pendinglen;
+			pendinglen = 0;
+		}
 
 		wlneeddraw();
 		return ret;
