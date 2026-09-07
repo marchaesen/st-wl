@@ -863,6 +863,7 @@ void
 selwritebuf(char *buf, int len)
 {
 	char *repl = buf;
+	char *last = buf + len;
 
 	/*
 	 * As seen in getsel:
@@ -870,8 +871,12 @@ selwritebuf(char *buf, int len)
 	 * copy and pasting. When receiving some selection data,
 	 * replace all '\n' with '\r'.
 	 * FIXME: Fix the computer world.
+	 *
+	 * Bound every scan by what is left of the buffer: passing the full
+	 * len again after advancing repl walks memchr past the end of buf,
+	 * and each '\n' it finds out there is also written back as '\r'.
 	 */
-	while ((repl = memchr(repl, '\n', len))) {
+	while ((repl = memchr(repl, '\n', last - repl))) {
 		*repl++ = '\r';
 	}
 
