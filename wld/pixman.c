@@ -306,10 +306,22 @@ void renderer_draw_text(struct wld_renderer * base,
         length -= ret;
         glyph_index = FT_Get_Char_Index(font->face, c);
 
-        if (!font_ensure_glyph(font, glyph_index))
-            continue;
-
-        glyph = font->glyphs[glyph_index];
+        if (font_ensure_glyph(font, glyph_index)) {
+            glyph = font->glyphs[glyph_index];
+        } else {
+            glyph = NULL;
+            for (int fi = 0; fi < WLD_NUM_FALLBACK_FONTS; fi++) {
+                if (!font->fallback_face[fi])
+                    continue;
+                glyph_index = FT_Get_Char_Index(font->fallback_face[fi], c);
+                if (fallback_ensure_glyph(font, fi, glyph_index)) {
+                    glyph = font->fallback_glyphs[fi][glyph_index];
+                    break;
+                }
+            }
+            if (!glyph)
+                continue;
+        }
 
         glyphs[index].x = origin_x;
         glyphs[index].y = 0;

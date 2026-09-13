@@ -71,6 +71,8 @@ struct glyph
     uint16_t advance;
 };
 
+#define WLD_NUM_FALLBACK_FONTS 3
+
 struct font
 {
     struct wld_font base;
@@ -78,6 +80,15 @@ struct font
     struct wld_font_context * context;
     FT_Face face;
     struct glyph ** glyphs;
+
+    /*
+     * Embedded fallback faces (Noto Emoji, Noto Sans Symbols, Noto Sans
+     * Symbols 2), tried in order for characters missing from `face`, so
+     * glyphs like emoji/dingbats/symbols render without depending on any
+     * system-installed font. An entry is NULL if that face failed to load.
+     */
+    FT_Face fallback_face[WLD_NUM_FALLBACK_FONTS];
+    struct glyph ** fallback_glyphs[WLD_NUM_FALLBACK_FONTS];
 };
 
 struct wld_context_impl
@@ -118,6 +129,7 @@ struct buffer_socket_impl
 };
 
 bool font_ensure_glyph(struct font * font, FT_UInt glyph_index);
+bool fallback_ensure_glyph(struct font * font, int fallback_index, FT_UInt glyph_index);
 
 /**
  * Returns the number of bytes per pixel for the given format.

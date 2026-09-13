@@ -30,6 +30,26 @@
 #include "JetBrainsMonoNerdFont-Italic.h"
 #include "JetBrainsMonoNerdFont-Regular.h"
 
+/*
+ * Embedded fallback fonts (monochrome, outline-based -- not color emoji
+ * fonts, since glyphs are rendered through FT_RENDER_MODE_NORMAL / an 8-bit
+ * alpha bitmap, which a CBDT/COLR color font would not produce correctly).
+ * Tried in order for characters missing from the main font (emoji, dingbats,
+ * misc symbols used as prompt icons) so they render without needing a
+ * matching system font.
+ */
+#include "NotoEmoji-Regular.h"
+#include "NotoSansSymbols.h"
+#include "NotoSansSymbols2.h"
+
+struct embedded_font { const unsigned char *data; unsigned int size; };
+
+static const struct embedded_font fallback_fonts[WLD_NUM_FALLBACK_FONTS] = {
+	{ NotoEmoji_ttf, sizeof(NotoEmoji_ttf) },
+	{ NotoSansSymbols_ttf, sizeof(NotoSansSymbols_ttf) },
+	{ NotoSansSymbols2_ttf, sizeof(NotoSansSymbols2_ttf) },
+};
+
 EXPORT
 struct wld_font_context * wld_font_create_context()
 {
@@ -153,6 +173,23 @@ struct wld_font * wld_font_open_pattern(struct wld_font_context * context,
 
 	font->glyphs = calloc(font->face->num_glyphs, sizeof(struct glyph *));
 
+	for (int i = 0; i < WLD_NUM_FALLBACK_FONTS; i++) {
+		font->fallback_face[i] = NULL;
+		font->fallback_glyphs[i] = NULL;
+		if (FT_New_Memory_Face(context->library, fallback_fonts[i].data,
+					fallback_fonts[i].size, 0, &font->fallback_face[i]) == 0) {
+			FT_Set_Pixel_Sizes(font->fallback_face[i], 0, fontsize);
+			font->fallback_glyphs[i] = calloc(font->fallback_face[i]->num_glyphs,
+					sizeof(struct glyph *));
+			if (!font->fallback_glyphs[i]) {
+				FT_Done_Face(font->fallback_face[i]);
+				font->fallback_face[i] = NULL;
+			}
+		} else {
+			font->fallback_face[i] = NULL;
+		}
+	}
+
 	return &font->base;
 
 error1:
@@ -166,6 +203,9 @@ void wld_font_close(struct wld_font * font_base)
 {
 	struct font * font = (void *) font_base;
 
+	for (int i = 0; i < WLD_NUM_FALLBACK_FONTS; i++)
+		if (font->fallback_face[i])
+			FT_Done_Face(font->fallback_face[i]);
 	FT_Done_Face(font->face);
 	free(font);
 }
@@ -204,6 +244,43 @@ bool font_ensure_glyph(struct font * font, FT_UInt glyph_index)
 	return false;
 }
 
+bool fallback_ensure_glyph(struct font * font, int fallback_index, FT_UInt glyph_index)
+{
+	FT_Face face = font->fallback_face[fallback_index];
+	struct glyph ** glyphs = font->fallback_glyphs[fallback_index];
+
+	if (glyph_index)
+	{
+		if (!glyphs[glyph_index])
+		{
+			struct glyph * glyph;
+
+			glyph = malloc(sizeof *glyph);
+
+			if (!glyph)
+				return false;
+
+			FT_Load_Glyph(face, glyph_index, FT_LOAD_DEFAULT);
+			FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL);
+
+			FT_Bitmap_New(&glyph->bitmap);
+
+			FT_Bitmap_Copy(font->context->library,
+					&face->glyph->bitmap, &glyph->bitmap);
+
+			glyph->advance = face->glyph->metrics.horiAdvance >> 6;
+			glyph->x = face->glyph->bitmap_left;
+			glyph->y = -face->glyph->bitmap_top;
+
+			glyphs[glyph_index] = glyph;
+		}
+
+		return true;
+	}
+
+	return false;
+}
+
 EXPORT
 bool wld_font_ensure_char(struct wld_font * font_base, uint32_t character)
 {
@@ -212,7 +289,18 @@ bool wld_font_ensure_char(struct wld_font * font_base, uint32_t character)
 
 	glyph_index = FT_Get_Char_Index(font->face, character);
 
-	return font_ensure_glyph(font, glyph_index);
+	if (font_ensure_glyph(font, glyph_index))
+		return true;
+
+	for (int i = 0; i < WLD_NUM_FALLBACK_FONTS; i++) {
+		if (!font->fallback_face[i])
+			continue;
+		glyph_index = FT_Get_Char_Index(font->fallback_face[i], character);
+		if (fallback_ensure_glyph(font, i, glyph_index))
+			return true;
+	}
+
+	return false;
 }
 
 EXPORT
@@ -233,10 +321,20 @@ void wld_font_text_extents_n(struct wld_font * font_base,
 		text += ret;
 		glyph_index = FT_Get_Char_Index(font->face, c);
 
-		if (!font_ensure_glyph(font, glyph_index))
+		if (font_ensure_glyph(font, glyph_index)) {
+			extents->advance += font->glyphs[glyph_index]->advance;
 			continue;
+		}
 
-		extents->advance += font->glyphs[glyph_index]->advance;
+		for (int i = 0; i < WLD_NUM_FALLBACK_FONTS; i++) {
+			if (!font->fallback_face[i])
+				continue;
+			glyph_index = FT_Get_Char_Index(font->fallback_face[i], c);
+			if (fallback_ensure_glyph(font, i, glyph_index)) {
+				extents->advance += font->fallback_glyphs[i][glyph_index]->advance;
+				break;
+			}
+		}
 	}
 }
 
