@@ -16,7 +16,7 @@ ifdef DEBUG
 DEBUGFLAGS=-O0 -g -DDEBUG
 endif
 
-SRC = st.c wl.c xdg-shell-protocol.c xdg-decoration-protocol.c primary-selection-protocol.c $(SIXEL_C) $(LIGATURES_C)
+SRC = st.c wl.c xdg-shell-protocol.c xdg-decoration-protocol.c primary-selection-protocol.c $(SIXEL_C) $(LIGATURES_C) $(KITTY_GRAPHICS_C)
 OBJ = $(SRC:%.c=.objects/%.o)
 DEP = $(SRC:%.c=.deps/%.d)
 

@@ -57,6 +57,9 @@ tclearglyph(Glyph *gp, int usecurattr)
 		gp->fg = defaultfg;
 		gp->bg = defaultbg;
 	}
+	#if KITTY_GRAPHICS_PATCH
+	gp->decor = usecurattr ? term.c.attr.decor : DECOR_DEFAULT_COLOR;
+	#endif // KITTY_GRAPHICS_PATCH
 	gp->mode = ATTR_NULL;
 	gp->u = ' ';
 }

@@ -241,6 +241,17 @@
  */
 #define KEYBOARDSELECT_PATCH 0
 
+/* This patch adds support for the kitty graphics protocol (a subset of it, including
+ * Unicode placeholders and animations), ported from st-graphics:
+ * images are decoded with Imlib2 and composited onto the Wayland buffer with pixman.
+ * Use icat-mini.sh to display images.
+ * Note that you need to uncomment the corresponding lines in config.mk when including this patch.
+ * This patch can be combined with the SIXEL patch.
+ *
+ * https://github.com/sergei-grechanik/st-graphics
+ */
+#define KITTY_GRAPHICS_PATCH 1
+
 /* This patch adds support for drawing ligatures using the Harfbuzz library to transform
  * original text of a single line to a list of glyphs with ligatures included.
  * This patch depends on the Harfbuzz library and headers to compile.

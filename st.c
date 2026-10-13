@@ -30,6 +30,10 @@
 #include "sixel.h"
 #endif // SIXEL_PATCH
 
+#if KITTY_GRAPHICS_PATCH
+#include "graphics.h"
+#endif // KITTY_GRAPHICS_PATCH
+
 #if   defined(__linux)
  #include <pty.h>
 #elif defined(__OpenBSD__) || defined(__NetBSD__) || defined(__APPLE__)
@@ -48,6 +52,12 @@
 #define STR_ARG_SIZ   ESC_ARG_SIZ
 #define STR_TERM_ST   "\033\\"
 #define STR_TERM_BEL  "\007"
+
+#if KITTY_GRAPHICS_PATCH
+/* PUA character used as an image placeholder */
+#define IMAGE_PLACEHOLDER_CHAR 0x10EEEE
+#define IMAGE_PLACEHOLDER_CHAR_OLD 0xEEEE
+#endif // KITTY_GRAPHICS_PATCH
 
 /* macros */
 #define IS_SET(flag)    ((term.mode & (flag)) != 0)
@@ -265,6 +275,12 @@ static const uchar utfbyte[UTF_SIZ + 1] = {0x80,    0, 0xC0, 0xE0, 0xF0};
 static const uchar utfmask[UTF_SIZ + 1] = {0xC0, 0x80, 0xE0, 0xF0, 0xF8};
 static const Rune utfmin[UTF_SIZ + 1] = {       0,    0,  0x80,  0x800,  0x10000};
 static const Rune utfmax[UTF_SIZ + 1] = {0x10FFFF, 0x7F, 0x7FF, 0xFFFF, 0x10FFFF};
+
+#if KITTY_GRAPHICS_PATCH
+/* Converts a diacritic to a row/column/etc number. The result is 1-base, 0
+ * means "couldn't convert". Defined in rowcolumn_diacritics_helpers.c */
+uint16_t diacritic_to_num(uint32_t code);
+#endif // KITTY_GRAPHICS_PATCH
 
 #include "patch/st_include.h"
 
@@ -754,6 +770,14 @@ getsel(void)
 			if (gp->mode & ATTR_WDUMMY)
 				continue;
 
+			#if KITTY_GRAPHICS_PATCH
+			if (gp->mode & ATTR_IMAGE) {
+				/* TODO: Copy diacritics as well */
+				ptr += utf8encode(IMAGE_PLACEHOLDER_CHAR, ptr);
+				continue;
+			}
+			#endif // KITTY_GRAPHICS_PATCH
+
 			ptr += utf8encode(gp->u, ptr);
 		}
 
@@ -831,6 +855,9 @@ execsh(char *cmd, char **args)
 	unsetenv("COLUMNS");
 	unsetenv("LINES");
 	unsetenv("TERMCAP");
+	/* a new terminal is never inside the tmux session it was started from */
+	unsetenv("TMUX");
+	unsetenv("TMUX_PANE");
 	setenv("LOGNAME", pw->pw_name, 1);
 	setenv("USER", pw->pw_name, 1);
 	setenv("SHELL", sh, 1);
@@ -1261,8 +1288,14 @@ tcursor(int mode)
 void
 tresetcursor(void)
 {
+	#if KITTY_GRAPHICS_PATCH
+	term.c = (TCursor){ { .mode = ATTR_NULL, .fg = defaultfg, .bg = defaultbg,
+	                      .decor = DECOR_DEFAULT_COLOR },
+	                    .x = 0, .y = 0, .state = CURSOR_DEFAULT };
+	#else
 	term.c = (TCursor){ { .mode = ATTR_NULL, .fg = defaultfg, .bg = defaultbg },
 	                    .x = 0, .y = 0, .state = CURSOR_DEFAULT };
+	#endif // KITTY_GRAPHICS_PATCH
 }
 
 void
@@ -1319,7 +1352,12 @@ treset(void)
 void
 tnew(int col, int row)
 {
+	#if KITTY_GRAPHICS_PATCH
+	term = (Term){ .c = { .attr = { .fg = defaultfg, .bg = defaultbg,
+	                                .decor = DECOR_DEFAULT_COLOR } } };
+	#else
 	term = (Term){ .c = { .attr = { .fg = defaultfg, .bg = defaultbg } } };
+	#endif // KITTY_GRAPHICS_PATCH
 	tresize(col, row);
 	treset();
 }
@@ -1665,12 +1703,31 @@ tsetchar(Rune u, const Glyph *attr, int x, int y)
 		term.line[y][x-1].mode &= ~ATTR_WIDE;
 	}
 
+	#if KITTY_GRAPHICS_PATCH
+	if (u == ' ' && term.line[y][x].mode & ATTR_IMAGE &&
+	    tgetisclassicplaceholder(&term.line[y][x])) {
+		/* This is a workaround: don't overwrite classic placement
+		 * placeholders with space symbols (unlike Unicode placeholders
+		 * which must be overwritten by anything). */
+		term.line[y][x].bg = attr->bg;
+		term.dirty[y] = 1;
+		return;
+	}
+	#endif // KITTY_GRAPHICS_PATCH
+
 	term.dirty[y] = 1;
 	term.line[y][x] = *attr;
 	term.line[y][x].u = u;
 	#if REFLOW_PATCH
 	term.line[y][x].mode |= ATTR_SET;
 	#endif // REFLOW_PATCH
+
+	#if KITTY_GRAPHICS_PATCH
+	if (u == IMAGE_PLACEHOLDER_CHAR || u == IMAGE_PLACEHOLDER_CHAR_OLD) {
+		term.line[y][x].u = 0;
+		term.line[y][x].mode |= ATTR_IMAGE;
+	}
+	#endif // KITTY_GRAPHICS_PATCH
 
 	#if BOXDRAW_PATCH
 	if (isboxdraw(u))
@@ -1712,12 +1769,157 @@ tclearregion(int x1, int y1, int x2, int y2)
 			}
 			gp->fg = term.c.attr.fg;
 			gp->bg = term.c.attr.bg;
+			#if KITTY_GRAPHICS_PATCH
+			gp->decor = term.c.attr.decor;
+			#endif // KITTY_GRAPHICS_PATCH
 			gp->mode = 0;
 			gp->u = ' ';
 		}
 	}
 }
 #endif // REFLOW_PATCH
+
+#if KITTY_GRAPHICS_PATCH
+/* Fills a rectangle area with an image placeholder. The starting point is the
+ * cursor. Adds empty lines if needed. The placeholder will be marked as
+ * classic. */
+static void
+tcreateimgplaceholder(uint32_t image_id, uint32_t placement_id, int cols,
+                      int rows, char do_not_move_cursor,
+                      Glyph *text_underneath)
+{
+	for (int row = 0; row < rows; ++row) {
+		int y = term.c.y;
+		term.dirty[y] = 1;
+		for (int col = 0; col < cols; ++col) {
+			int x = term.c.x + col;
+			if (x >= term.col)
+				break;
+			Glyph *gp = &term.line[y][x];
+			if (selected(x, y))
+				selclear();
+			if (text_underneath) {
+				Glyph *to_save = gp;
+				/* If there is already a classic placeholder,
+				 * use the text underneath it. This will leave
+				 * holes in images, but at least we are
+				 * guaranteed to restore the original text. */
+				if (gp->mode & ATTR_IMAGE &&
+				    tgetisclassicplaceholder(gp)) {
+					Glyph *under =
+						gr_get_glyph_underneath_image(
+							tgetimgid(gp),
+							tgetimgplacementid(gp),
+							tgetimgcol(gp),
+							tgetimgrow(gp));
+					if (under)
+						to_save = under;
+				}
+				text_underneath[cols * row + col] = *to_save;
+			}
+			/* This also drops ATTR_SIXEL, so a sixel image under
+			 * the placement is erased. */
+			gp->mode = ATTR_IMAGE;
+			gp->u = 0;
+			tsetimgrow(gp, row + 1);
+			tsetimgcol(gp, col + 1);
+			tsetimgid(gp, image_id);
+			tsetimgplacementid(gp, placement_id);
+			tsetimgdiacriticcount(gp, 3);
+			tsetisclassicplaceholder(gp, 1);
+		}
+		/* If moving the cursor is not allowed and this is the last line
+		 * of the terminal, we are done. */
+		if (do_not_move_cursor && y == term.row - 1)
+			break;
+		/* Move the cursor down, maybe creating a new line. The x is
+		 * preserved (we never change term.c.x in the loop above). */
+		if (row != rows - 1)
+			tnewline(/*first_col=*/0);
+	}
+	if (do_not_move_cursor) {
+		/* Return the cursor to the original position. */
+		tmoveto(term.c.x, term.c.y - rows + 1);
+	} else {
+		/* Move the cursor beyond the last column, as required by the
+		 * protocol. If the cursor goes beyond the screen edge, insert a
+		 * newline to match the behavior of kitty. */
+		if (term.c.x + cols >= term.col)
+			tnewline(/*first_col=*/1);
+		else
+			tmoveto(term.c.x + cols, term.c.y);
+	}
+}
+
+void
+gr_for_each_image_cell(int (*callback)(void *data, Glyph *gp), void *data)
+{
+	for (int row = 0; row < term.row; ++row) {
+		for (int col = 0; col < term.col; ++col) {
+			Glyph *gp = &term.line[row][col];
+			if (gp->mode & ATTR_IMAGE) {
+				if (callback(data, gp))
+					term.dirty[row] = 1;
+			}
+		}
+	}
+}
+
+void
+gr_schedule_image_redraw_by_id(uint32_t image_id)
+{
+	for (int row = 0; row < term.row; ++row) {
+		if (term.dirty[row])
+			continue;
+		for (int col = 0; col < term.col; ++col) {
+			Glyph *gp = &term.line[row][col];
+			if (gp->mode & ATTR_IMAGE) {
+				uint32_t cell_image_id = tgetimgid(gp);
+				if (cell_image_id == image_id) {
+					term.dirty[row] = 1;
+					break;
+				}
+			}
+		}
+	}
+}
+
+Glyph
+getglyphat(int col, int row)
+{
+	LIMIT(col, 0, term.col - 1);
+	LIMIT(row, 0, term.row - 1);
+	#if SCROLLBACK_PATCH || REFLOW_PATCH
+	return TLINE(row)[col];
+	#else
+	return term.line[row][col];
+	#endif // SCROLLBACK_PATCH || REFLOW_PATCH
+}
+
+/* Sets the decoration (underline) color from SGR 58, consuming the color
+ * arguments. Both the colon (58:5:n, 58:2:r:g:b) and the semicolon
+ * (58;5;n, 58;2;r;g;b) forms are supported. The decoration color of an
+ * image placeholder cell holds its placement id. */
+static void
+tsetdecorcolorsgr(const int *attr, int *npar, int l)
+{
+	int32_t idx = -1;
+	#if UNDERCURL_PATCH
+	const int *carg = csiescseq.carg[*npar];
+
+	if (carg[0] == 5 && BETWEEN(carg[1], 0, 255))
+		idx = carg[1];
+	else if (carg[0] == 2 && carg[3] >= 0)
+		idx = TRUECOLOR(carg[1] & 0xff, carg[2] & 0xff, carg[3] & 0xff);
+	else if (carg[0] == -1)
+		idx = tdefcolor(attr, npar, l);
+	#else
+	idx = tdefcolor(attr, npar, l);
+	#endif // UNDERCURL_PATCH
+	if (idx >= 0)
+		tsetdecorcolor(&term.c.attr, idx);
+}
+#endif // KITTY_GRAPHICS_PATCH
 
 #if !REFLOW_PATCH
 void
@@ -1867,6 +2069,9 @@ tsetattr(const int *attr, int l)
 			term.c.attr.ucolor[1] = -1;
 			term.c.attr.ucolor[2] = -1;
 			#endif // UNDERCURL_PATCH
+			#if KITTY_GRAPHICS_PATCH
+			term.c.attr.decor = DECOR_DEFAULT_COLOR;
+			#endif // KITTY_GRAPHICS_PATCH
 			break;
 		case 1:
 			term.c.attr.mode |= ATTR_BOLD;
@@ -1954,12 +2159,25 @@ tsetattr(const int *attr, int l)
 			term.c.attr.ucolor[1] = csiescseq.carg[i][2];
 			term.c.attr.ucolor[2] = csiescseq.carg[i][3];
 			term.c.attr.mode ^= ATTR_DIRTYUNDERLINE;
+			#if KITTY_GRAPHICS_PATCH
+			tsetdecorcolorsgr(attr, &i, l);
+			#endif // KITTY_GRAPHICS_PATCH
 			break;
 		case 59:
 			term.c.attr.ucolor[0] = -1;
 			term.c.attr.ucolor[1] = -1;
 			term.c.attr.ucolor[2] = -1;
 			term.c.attr.mode ^= ATTR_DIRTYUNDERLINE;
+			#if KITTY_GRAPHICS_PATCH
+			tsetdecorcolor(&term.c.attr, DECOR_DEFAULT_COLOR);
+			#endif // KITTY_GRAPHICS_PATCH
+			break;
+		#elif KITTY_GRAPHICS_PATCH
+		case 58:
+			tsetdecorcolorsgr(attr, &i, l);
+			break;
+		case 59:
+			tsetdecorcolor(&term.c.attr, DECOR_DEFAULT_COLOR);
 			break;
 		#else
 		case 58:
@@ -2598,10 +2816,10 @@ csihandle(void)
 	case 's': /* DECSC -- Save cursor position (ANSI.SYS) */
 		tcursor(CURSOR_SAVE);
 		break;
-	#if CSI_22_23_PATCH | SIXEL_PATCH
+	#if CSI_22_23_PATCH | SIXEL_PATCH | KITTY_GRAPHICS_PATCH
 	case 't': /* title stack operations ; XTWINOPS */
 		switch (csiescseq.arg[0]) {
-		#if SIXEL_PATCH
+		#if SIXEL_PATCH || KITTY_GRAPHICS_PATCH
 		case 14: /* text area size in pixels */
 			if (csiescseq.narg > 1)
 				goto unknown;
@@ -2617,7 +2835,7 @@ csihandle(void)
 			n = snprintf(buffer, sizeof buffer, "\033[8;%d;%dt", term.row, term.col);
 			ttywrite(buffer, n, 1);
 			break;
-		#endif // SIXEL_PATCH
+		#endif // SIXEL_PATCH || KITTY_GRAPHICS_PATCH
 		#if CSI_22_23_PATCH
 		case 22: /* pust current title on stack */
 			switch (csiescseq.arg[1]) {
@@ -2646,7 +2864,7 @@ csihandle(void)
 			goto unknown;
 		}
 		break;
-	#endif // CSI_22_23_PATCH | SIXEL_PATCH
+	#endif // CSI_22_23_PATCH | SIXEL_PATCH | KITTY_GRAPHICS_PATCH
 	case 'u': /* DECRC -- Restore cursor position (ANSI.SYS) */
 		if (csiescseq.priv) {
 			goto unknown;
@@ -3005,6 +3223,26 @@ strhandle(void)
 		return;
 		#endif // SIXEL_PATCH | SYNC_PATCH
 	case '_': /* APC -- Application Program Command */
+		#if KITTY_GRAPHICS_PATCH
+		if (gr_parse_command(strescseq.buf, strescseq.len)) {
+			GraphicsCommandResult *res = &graphics_command_result;
+			if (res->create_placeholder) {
+				tcreateimgplaceholder(
+					res->placeholder.image_id,
+					res->placeholder.placement_id,
+					res->placeholder.columns,
+					res->placeholder.rows,
+					res->placeholder.do_not_move_cursor,
+					res->placeholder.text_underneath);
+			}
+			if (res->response[0])
+				ttywrite(res->response, strlen(res->response),
+					 0);
+			if (res->redraw)
+				tfulldirt();
+		}
+		#endif // KITTY_GRAPHICS_PATCH
+		return;
 	case '^': /* PM -- Privacy Message */
 		return;
 	}
@@ -3647,6 +3885,43 @@ check_control_code:
 	}
 	#endif // REFLOW_PATCH
 
+	#if KITTY_GRAPHICS_PATCH
+	/* wcwidth is broken on some systems, set the width to 0 if it's a known
+	 * diacritic used for images. */
+	uint16_t num = diacritic_to_num(u);
+	if (num != 0)
+		width = 0;
+	/* Set the width to 1 if it's an image placeholder character. */
+	if (u == IMAGE_PLACEHOLDER_CHAR || u == IMAGE_PLACEHOLDER_CHAR_OLD)
+		width = 1;
+
+	if (width == 0) {
+		/* It's probably a combining char. Combining characters are not
+		 * supported, so we just ignore them, unless it denotes the row
+		 * and column of an image character. */
+		if (term.c.y <= 0 && term.c.x <= 0)
+			return;
+		else if (term.c.x == 0)
+			gp = &term.line[term.c.y-1][term.col-1];
+		else if (term.c.state & CURSOR_WRAPNEXT)
+			gp = &term.line[term.c.y][term.c.x];
+		else
+			gp = &term.line[term.c.y][term.c.x-1];
+		if (num && (gp->mode & ATTR_IMAGE)) {
+			unsigned diaccount = tgetimgdiacriticcount(gp);
+			if (diaccount == 0)
+				tsetimgrow(gp, num);
+			else if (diaccount == 1)
+				tsetimgcol(gp, num);
+			else if (diaccount == 2)
+				tsetimg4thbyteplus1(gp, num);
+			tsetimgdiacriticcount(gp, diaccount + 1);
+		}
+		term.lastc = u;
+		return;
+	}
+	#endif // KITTY_GRAPHICS_PATCH
+
 	gp = &term.line[term.c.y][term.c.x];
 	if (IS_SET(MODE_WRAP) && (term.c.state & CURSOR_WRAPNEXT)) {
 		gp->mode |= ATTR_WRAP;
@@ -3928,6 +4203,10 @@ drawregion(int x1, int y1, int x2, int y2)
 {
 	int y;
 
+	#if KITTY_GRAPHICS_PATCH
+	xstartimagedraw(term.dirty, term.row);
+	#endif // KITTY_GRAPHICS_PATCH
+
 	for (y = y1; y < y2; y++) {
 		if (!term.dirty[y])
 			continue;
@@ -3940,6 +4219,10 @@ drawregion(int x1, int y1, int x2, int y2)
 		xdrawline(term.line[y], x1, y, x2);
 #endif // SCROLLBACK_PATCH
 	}
+
+	#if KITTY_GRAPHICS_PATCH
+	xfinishimagedraw();
+	#endif // KITTY_GRAPHICS_PATCH
 }
 
 #include "patch/st_include.c"

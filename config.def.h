@@ -306,6 +306,30 @@ static char* mouseshape = "xterm";
  */
 static unsigned int defaultattr = 11;
 
+#if KITTY_GRAPHICS_PATCH
+/*
+ * Graphics configuration (kitty graphics protocol)
+ */
+
+/* The template for the cache directory. */
+const char graphics_cache_dir_template[] = "/tmp/st-images-XXXXXX";
+/* The max size of a single image file, in bytes. */
+unsigned graphics_max_single_image_file_size = 20 * 1024 * 1024;
+/* The max size of the cache, in bytes. */
+unsigned graphics_total_file_cache_size = 300 * 1024 * 1024;
+/* The max ram size of an image or placement, in bytes. */
+unsigned graphics_max_single_image_ram_size = 100 * 1024 * 1024;
+/* The max total size of all images loaded into RAM. */
+unsigned graphics_max_total_ram_size = 300 * 1024 * 1024;
+/* The max total number of image placements and images. */
+unsigned graphics_max_total_placements = 4096;
+/* The ratio by which limits can be exceeded. This is to reduce the frequency
+ * of image removal. */
+double graphics_excess_tolerance_ratio = 0.05;
+/* The minimum delay between redraws caused by animations, in milliseconds. */
+unsigned graphics_animation_min_delay = 20;
+#endif // KITTY_GRAPHICS_PATCH
+
 /*
  * Force mouse select/shortcuts while mask is active (when MODE_MOUSE is set).
  * Note that if you want to use MOD_MASK_SHIFT with selmasks, set this to an other
@@ -425,7 +449,26 @@ static Shortcut shortcuts[] = {
 	{ MOD_MASK_CTRL,          XKB_KEY_Page_Up,     scrolltoprompt,  {.i = -1}, S_PRI },
 	{ MOD_MASK_CTRL,          XKB_KEY_Page_Down,   scrolltoprompt,  {.i =  1}, S_PRI },
 	#endif // OSC133_PATCH
+	#if KITTY_GRAPHICS_PATCH
+	{ TERMMOD,              XKB_KEY_F1,          togglegrdebug,   {.i =  0} },
+	{ TERMMOD,              XKB_KEY_F6,          dumpgrstate,     {.i =  0} },
+	{ TERMMOD,              XKB_KEY_F7,          unloadimages,    {.i =  0} },
+	{ TERMMOD,              XKB_KEY_F8,          toggleimages,    {.i =  0} },
+	#endif // KITTY_GRAPHICS_PATCH
 };
+
+#if KITTY_GRAPHICS_PATCH
+/*
+ * Mouse shortcuts acting on the image cell under the pointer (kitty graphics).
+ * They are checked before the default button handling. `release` selects
+ * whether the shortcut fires on button release (1) or press (0).
+ */
+static Mousekey mshortcuts[] = {
+	/* mask                 button      function         argument            release */
+	{ TERMMOD,              BTN_RIGHT,  previewimage,    {.s = "xdg-open"},  0 },
+	{ TERMMOD,              BTN_MIDDLE, showimageinfo,   {.i =  0},          1 },
+};
+#endif // KITTY_GRAPHICS_PATCH
 
 /*
  * Special keys (change & recompile st.info accordingly)

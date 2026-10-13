@@ -218,6 +218,12 @@ Refer to [https://st.suckless.org/](https://st.suckless.org/) for details on the
    - [keyboard-select](https://st.suckless.org/patches/keyboard_select/)
       - allows you to select text on the terminal using keyboard shortcuts
 
+   - [kitty-graphics](https://github.com/sergei-grechanik/st-graphics)
+      - adds support for a subset of the [kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) (direct, file and shared memory uploads, classic placements and Unicode placeholders, animations), ported from st-graphics to the Wayland backend
+      - images are decoded with Imlib2 and composited onto the Wayland buffer with pixman; requires the Imlib2 and zlib headers (see config.mk)
+      - `icat-mini.sh` is a small shell script to display images, e.g. `./icat-mini.sh image.png`
+      - Ctrl+Shift+F1 cycles the graphics debug mode, F6 dumps the state, F7 unloads images from RAM, F8 toggles image display; Ctrl+Shift+right click opens the image under the pointer with `xdg-open`, Ctrl+Shift+middle click shows image info
+
    - [ligatures](https://st.suckless.org/patches/ligatures/)
       - adds support for drawing ligatures using the Harfbuzz library to transform original text of a single line to a list of glyphs with ligatures included
 

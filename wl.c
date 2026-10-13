@@ -30,6 +30,11 @@ char *argv0;
 #include "xdg-decoration-protocol.h"
 #include "primary-selection-client-protocol.h"
 
+#if KITTY_GRAPHICS_PATCH
+#include <wld/pixman.h>
+#include "graphics.h"
+#endif // KITTY_GRAPHICS_PATCH
+
 static char *font = "JetBrainsMono Nerd Font:antialias=true:autohint=true";
 
 #if SIXEL_PATCH
@@ -46,6 +51,16 @@ typedef struct {
   const Arg arg;
   int screen;
 } Axiskey;
+
+#if KITTY_GRAPHICS_PATCH
+typedef struct {
+	uint mask;
+	uint32_t button;
+	void (*func)(const Arg *);
+	const Arg arg;
+	uint release;
+} Mousekey;
+#endif // KITTY_GRAPHICS_PATCH
 
 #if CSI_22_23_PATCH
 /* size of title stack */
@@ -86,6 +101,14 @@ static void ttysend(const Arg *);
 static void zoom(const Arg *);
 static void zoomabs(const Arg *);
 static void zoomreset(const Arg *);
+#if KITTY_GRAPHICS_PATCH
+static void previewimage(const Arg *);
+static void showimageinfo(const Arg *);
+static void togglegrdebug(const Arg *);
+static void dumpgrstate(const Arg *);
+static void unloadimages(const Arg *);
+static void toggleimages(const Arg *);
+#endif // KITTY_GRAPHICS_PATCH
 
 #include "patch/st_include.h"
 #include "patch/x_include.h"
@@ -201,6 +224,9 @@ static void wlmousereport(int, bool, int, int);
 static void wlmousereportbutton(uint32_t, uint32_t);
 static void wlmousereportmotion(wl_fixed_t, wl_fixed_t);
 static void wlmousereportaxis(uint32_t, wl_fixed_t);
+#if KITTY_GRAPHICS_PATCH
+static int wlmouseaction(uint32_t, uint);
+#endif // KITTY_GRAPHICS_PATCH
 static void ptrenter(void *, struct wl_pointer *, uint32_t,
 		struct wl_surface *, wl_fixed_t, wl_fixed_t);
 static void ptrleave(void *, struct wl_pointer *, uint32_t,
@@ -724,6 +750,11 @@ ptrbutton(void * data, struct wl_pointer * pointer, uint32_t serial,
 		wlmousereportbutton(button, state);
 		return;
 	}
+
+	#if KITTY_GRAPHICS_PATCH
+	if (wlmouseaction(button, state == WL_POINTER_BUTTON_STATE_RELEASED))
+		return;
+	#endif // KITTY_GRAPHICS_PATCH
 
 	switch (state) {
 		case WL_POINTER_BUTTON_STATE_RELEASED:
@@ -1340,6 +1371,81 @@ ttysend(const Arg *arg)
 {
 	ttywrite(arg->s, strlen(arg->s), 1);
 }
+
+#if KITTY_GRAPHICS_PATCH
+/* Runs the first mouse shortcut matching the button, the modifiers and the
+ * press/release state. The pointer position is used as the target cell.
+ * Returns 1 if a shortcut was executed. */
+static int
+wlmouseaction(uint32_t button, uint release)
+{
+	Mousekey *ms;
+
+	for (ms = mshortcuts; ms < mshortcuts + LEN(mshortcuts); ms++) {
+		if (ms->release == release && ms->button == button &&
+		    match(ms->mask, wl.xkb.mods)) {
+			ms->func(&(ms->arg));
+			return 1;
+		}
+	}
+	return 0;
+}
+
+void
+previewimage(const Arg *arg)
+{
+	Glyph g = getglyphat(evcol(wl.px), evrow(wl.py));
+	if (g.mode & ATTR_IMAGE) {
+		uint32_t image_id = tgetimgid(&g);
+		fprintf(stderr, "Clicked on placeholder %u/%u, x=%d, y=%d\n",
+			image_id, tgetimgplacementid(&g), tgetimgcol(&g),
+			tgetimgrow(&g));
+		gr_preview_image(image_id, arg->s);
+	}
+}
+
+void
+showimageinfo(const Arg *arg)
+{
+	Glyph g = getglyphat(evcol(wl.px), evrow(wl.py));
+	if (g.mode & ATTR_IMAGE) {
+		uint32_t image_id = tgetimgid(&g);
+		fprintf(stderr, "Clicked on placeholder %u/%u, x=%d, y=%d\n",
+			image_id, tgetimgplacementid(&g), tgetimgcol(&g),
+			tgetimgrow(&g));
+		gr_show_image_info(image_id, tgetimgplacementid(&g),
+				   tgetimgcol(&g), tgetimgrow(&g),
+				   tgetisclassicplaceholder(&g),
+				   tgetimgdiacriticcount(&g), argv0);
+	}
+}
+
+void
+togglegrdebug(const Arg *arg)
+{
+	graphics_debug_mode = (graphics_debug_mode + 1) % 3;
+	redraw();
+}
+
+void
+dumpgrstate(const Arg *arg)
+{
+	gr_dump_state();
+}
+
+void
+unloadimages(const Arg *arg)
+{
+	gr_unload_images_to_reduce_ram();
+}
+
+void
+toggleimages(const Arg *arg)
+{
+	graphics_display_images = !graphics_display_images;
+	redraw();
+}
+#endif // KITTY_GRAPHICS_PATCH
 
 void
 zoom(const Arg *arg)
@@ -2209,6 +2315,13 @@ static void wldrawCharacter(Glyph g, int x, int y)
 	/* Clean up the region we want to draw to. */
 	wld_fill_rectangle(wld.renderer, (bg & (term_alpha << 24)) | (bg & 0x00FFFFFF), winx, winy, width, win.ch);
 
+	#if KITTY_GRAPHICS_PATCH
+	/* Image placeholders are drawn as spaces, the images are drawn
+	 * separately (see xdrawimages). */
+	if (g.mode & ATTR_IMAGE)
+		return;
+	#endif // KITTY_GRAPHICS_PATCH
+
 	/*
 	 * Search for the range in the to be printed string of glyphs
 	 * that are in the main font. Then print that range. If
@@ -2337,6 +2450,194 @@ static void wldrawCharacter(Glyph g, int x, int y)
 	#endif // OPENURLONCLICK_PATCH
 }
 
+#if KITTY_GRAPHICS_PATCH
+/* The frame buffer image that images are composited onto, valid between
+ * xstartimagedraw() and xfinishimagedraw(). */
+static pixman_image_t *grtarget = NULL;
+
+/* Pixel coordinates of the top-left corner of the cell grid. */
+static inline int
+wlgridx(void)
+{
+	#if ANYSIZE_PATCH
+	return win.hborderpx;
+	#else
+	return borderpx + csd_dx();
+	#endif // ANYSIZE_PATCH
+}
+
+static inline int
+wlgridy(void)
+{
+	#if ANYSIZE_PATCH
+	return win.vborderpx;
+	#else
+	return borderpx + csd_dy();
+	#endif // ANYSIZE_PATCH
+}
+
+/* Whether the image in the cell should be drawn with inverted colors. */
+static int
+wlimagereverse(Glyph g, int x, int y)
+{
+	return !!(g.mode & ATTR_REVERSE) ^ !!selected(x, y);
+}
+
+/* Draw (or queue for drawing) image cells between columns x1 and x2 assuming
+ * that they have the same attributes (and thus the same lower 24 bits of the
+ * image ID and the same placement ID). */
+static void
+xdrawimages(Glyph base, Line line, int x1, int y1, int x2, int reverse)
+{
+	int y_pix = wlgridy() + y1 * win.ch;
+	uint32_t image_id_24bits = base.fg & 0xFFFFFF;
+	uint32_t placement_id = tgetimgplacementid(&base);
+	/* Columns and rows are 1-based, 0 means unspecified. */
+	int last_col = 0;
+	int last_row = 0;
+	int last_start_col = 0;
+	int last_start_x = x1;
+	/* The most significant byte is also 1-base, subtract 1 before use. */
+	uint32_t last_id_4thbyteplus1 = 0;
+	/* We may need to inherit row/column/4th byte from the previous cell. */
+	if (x1 > 0) {
+		Glyph *prev = &line[x1 - 1];
+		if ((prev->mode & ATTR_IMAGE) &&
+		    (prev->fg & 0xFFFFFF) == image_id_24bits &&
+		    prev->decor == base.decor) {
+			last_row = tgetimgrow(prev);
+			last_col = tgetimgcol(prev);
+			last_id_4thbyteplus1 = tgetimgid4thbyteplus1(prev);
+			last_start_col = last_col + 1;
+		}
+	}
+	for (int x = x1; x < x2; ++x) {
+		Glyph *g = &line[x];
+		uint32_t cur_row = tgetimgrow(g);
+		uint32_t cur_col = tgetimgcol(g);
+		uint32_t cur_id_4thbyteplus1 = tgetimgid4thbyteplus1(g);
+		uint32_t num_diacritics = tgetimgdiacriticcount(g);
+		/* If the row is not specified, assume it's the same as the row
+		 * of the previous cell. Note that `cur_row` may contain a
+		 * value imputed earlier, which will be preserved if `last_row`
+		 * is zero (i.e. we don't know the row of the previous cell). */
+		if (last_row && (num_diacritics == 0 || !cur_row))
+			cur_row = last_row;
+		/* If the column is not specified and the row is the same as the
+		 * row of the previous cell, then assume that the column is the
+		 * next one. */
+		if (last_col && (num_diacritics <= 1 || !cur_col) &&
+		    cur_row == last_row)
+			cur_col = last_col + 1;
+		/* If the additional id byte is not specified and the
+		 * coordinates are consecutive, assume the byte is also the
+		 * same. */
+		if (last_id_4thbyteplus1 &&
+		    (num_diacritics <= 2 || !cur_id_4thbyteplus1) &&
+		    cur_row == last_row && cur_col == last_col + 1)
+			cur_id_4thbyteplus1 = last_id_4thbyteplus1;
+		/* If we couldn't infer row and column, start from the top left
+		 * corner. */
+		if (cur_row == 0)
+			cur_row = 1;
+		if (cur_col == 0)
+			cur_col = 1;
+		/* If this cell breaks a contiguous stripe of image cells, draw
+		 * that line and start a new one. */
+		if (cur_col != last_col + 1 || cur_row != last_row ||
+		    cur_id_4thbyteplus1 != last_id_4thbyteplus1) {
+			uint32_t image_id = image_id_24bits;
+			if (last_id_4thbyteplus1)
+				image_id |= (last_id_4thbyteplus1 - 1) << 24;
+			if (last_row != 0) {
+				int x_pix = wlgridx() + last_start_x * win.cw;
+				gr_append_imagerect(
+					grtarget, image_id, placement_id,
+					last_start_col - 1, last_col,
+					last_row - 1, last_row, last_start_x,
+					y1, x_pix, y_pix, win.cw, win.ch,
+					reverse);
+			}
+			last_start_col = cur_col;
+			last_start_x = x;
+		}
+		last_row = cur_row;
+		last_col = cur_col;
+		last_id_4thbyteplus1 = cur_id_4thbyteplus1;
+		/* Populate the missing glyph data to enable inheritance between
+		 * runs and support the naive implementation of tgetimgid. */
+		if (!tgetimgrow(g))
+			tsetimgrow(g, cur_row);
+		/* We cannot save this information if there are > 511 cols. */
+		if (!tgetimgcol(g) && (cur_col & ~0x1ff) == 0)
+			tsetimgcol(g, cur_col);
+		if (!tgetimgid4thbyteplus1(g))
+			tsetimg4thbyteplus1(g, cur_id_4thbyteplus1);
+	}
+	uint32_t image_id = image_id_24bits;
+	if (last_id_4thbyteplus1)
+		image_id |= (last_id_4thbyteplus1 - 1) << 24;
+	/* Draw the last contiguous stripe. */
+	if (last_row != 0) {
+		int x_pix = wlgridx() + last_start_x * win.cw;
+		gr_append_imagerect(grtarget, image_id, placement_id,
+				    last_start_col - 1, last_col, last_row - 1,
+				    last_row, last_start_x, y1, x_pix, y_pix,
+				    win.cw, win.ch, reverse);
+	}
+}
+
+/* Draw just one image cell without inheriting attributes from the left. */
+static void
+xdrawoneimagecell(Glyph g, int x, int y)
+{
+	if (!(g.mode & ATTR_IMAGE))
+		return;
+	int x_pix = wlgridx() + x * win.cw;
+	int y_pix = wlgridy() + y * win.ch;
+	uint32_t row = tgetimgrow(&g) - 1;
+	uint32_t col = tgetimgcol(&g) - 1;
+	uint32_t placement_id = tgetimgplacementid(&g);
+	uint32_t image_id = tgetimgid(&g);
+	gr_append_imagerect(grtarget, image_id, placement_id, col, col + 1,
+			    row, row + 1, x, y, x_pix, y_pix, win.cw, win.ch,
+			    g.mode & ATTR_REVERSE);
+}
+
+/* Prepare for image drawing: get the pixman image of the frame buffer (the
+ * renderer target set by xstartdraw()). If `dirty` is not NULL, rows with
+ * animations that need to be redrawn are marked dirty. */
+void
+xstartimagedraw(int *dirty, int rows)
+{
+	union wld_object object;
+
+	if (grtarget)
+		pixman_image_unref(grtarget);
+	grtarget = NULL;
+	if (wld.buffer &&
+	    wld_export(wld.buffer, WLD_PIXMAN_OBJECT_IMAGE, &object))
+		grtarget = object.ptr;
+	gr_start_drawing(grtarget, win.cw, win.ch);
+	if (dirty)
+		gr_mark_dirty_animations(dirty, rows);
+}
+
+/* Draw all queued image cells. The images are always drawn inside lines (or
+ * the cursor cell) that are damaged by xdrawline() and xdrawcursor(). */
+void
+xfinishimagedraw(void)
+{
+	gr_finish_drawing(grtarget);
+	/* The debug mode draws a marker in the top-left corner. */
+	if (graphics_debug_mode)
+		wl_surface_damage(wl.surface, 0, 0, 16, 16);
+	if (grtarget)
+		pixman_image_unref(grtarget);
+	grtarget = NULL;
+}
+#endif // KITTY_GRAPHICS_PATCH
+
 void xdrawline(Line line, int x1, int y, int x2)
 {
 	// Go from the end to the beginning to avoid parts of characters that are to wide to be overwritten
@@ -2357,6 +2658,30 @@ void xdrawline(Line line, int x1, int y, int x2)
 		wldrawCharacter(new, x, y);
 	}
 
+	#if KITTY_GRAPHICS_PATCH
+	/* Queue the images of placeholder cells after the text of the line.
+	 * Runs of cells with the same image attributes are drawn together. */
+	for (int x = x1; x < x2;) {
+		Glyph base = line[x];
+		int reverse, xe;
+
+		if (!(base.mode & ATTR_IMAGE)) {
+			x++;
+			continue;
+		}
+		reverse = wlimagereverse(base, x, y);
+		for (xe = x + 1; xe < x2; xe++) {
+			if (!(line[xe].mode & ATTR_IMAGE) ||
+			    line[xe].fg != base.fg ||
+			    line[xe].decor != base.decor ||
+			    wlimagereverse(line[xe], xe, y) != reverse)
+				break;
+		}
+		xdrawimages(base, line, x, y, xe, reverse);
+		x = xe;
+	}
+	#endif // KITTY_GRAPHICS_PATCH
+
 	#if ANYSIZE_PATCH
 	wl_surface_damage(wl.surface, 0, win.vborderpx + y * win.ch, win.w, win.ch);
 	#else
@@ -2368,6 +2693,13 @@ static void wldrawglyph(Glyph g, int x, int y)
 {
 	g.mode &= ~ATTR_REVERSE; // This function is only used for the cursor, so the reverse attribute is not needed (otherwise the cursor stops blinking in certain cases)
 	wldrawCharacter(g, x, y);
+	#if KITTY_GRAPHICS_PATCH
+	if (g.mode & ATTR_IMAGE) {
+		xstartimagedraw(NULL, 0);
+		xdrawoneimagecell(g, x, y);
+		xfinishimagedraw();
+	}
+	#endif // KITTY_GRAPHICS_PATCH
 }
 
 static void wlloadcursor(void)
@@ -2437,6 +2769,12 @@ void xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 
 	if (IS_SET(MODE_HIDE))
 		return;
+
+	#if KITTY_GRAPHICS_PATCH
+	/* If it's an image, just draw a ballot box for simplicity. */
+	if (g.mode & ATTR_IMAGE)
+		g.u = 0x2610;
+	#endif // KITTY_GRAPHICS_PATCH
 
 	/*
 	 * Select the right color for the right mode.
@@ -2829,6 +3167,12 @@ wlinit(int cols, int rows)
 	wld.ctx = wld_wayland_create_context(wl.dpy);
 	wld.renderer = wld_create_renderer(wld.ctx);
 
+	#if KITTY_GRAPHICS_PATCH
+	/* Initialize the graphics (image display) module. It registers
+	 * gr_deinit() with atexit(). */
+	gr_init();
+	#endif // KITTY_GRAPHICS_PATCH
+
 	wl_display_roundtrip(wl.dpy);
 
 	if (!wl.shm)
@@ -2941,6 +3285,9 @@ run(void)
 	int drawing;
 	struct timespec drawtimeout, now, lastblink, trigger;
 	long timeout;
+	#if KITTY_GRAPHICS_PATCH
+	struct timespec grlastdraw = {0};
+	#endif // KITTY_GRAPHICS_PATCH
 
 	/* Look for initial configure. */
 	wl_display_roundtrip(wl.dpy);
@@ -3133,9 +3480,26 @@ run(void)
 				timeout = rep_timeout;
 		}
 
+		#if KITTY_GRAPHICS_PATCH
+		/* Schedule a redraw when an animation frame is due, and decrease
+		 * the timeout accordingly. The animated rows are marked dirty by
+		 * gr_mark_dirty_animations() in drawregion(). */
+		if (graphics_next_redraw_delay != INT_MAX && IS_SET(MODE_VISIBLE)) {
+			long grdelay = graphics_next_redraw_delay -
+			               TIMEDIFF(now, grlastdraw);
+			if (grdelay <= 0)
+				wlneeddraw();
+			else if (grdelay < timeout)
+				timeout = grdelay;
+		}
+		#endif // KITTY_GRAPHICS_PATCH
+
 		if (!wl.needdraw)
 			continue;
 
+		#if KITTY_GRAPHICS_PATCH
+		grlastdraw = now;
+		#endif // KITTY_GRAPHICS_PATCH
 		draw();
 
 //		wl_display_dispatch_pending(wl.dpy);
