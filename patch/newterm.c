@@ -28,11 +28,12 @@ newterm(const Arg* a)
 					* symlink. */
 					setenv("PWD", term.cwd, 1);
 				}
-			} else {
-				chdir(getcwd_by_pid(pid));
+			} else if (chdir(getcwd_by_pid(pid)) < 0) {
+				fprintf(stderr, "newterm: chdir: %s\n", strerror(errno));
 			}
 			#else
-			chdir(getcwd_by_pid(pid));
+			if (chdir(getcwd_by_pid(pid)) < 0)
+				fprintf(stderr, "newterm: chdir: %s\n", strerror(errno));
 			#endif // OSC7_PATCH
 
 			execl("/proc/self/exe", argv0, NULL);

@@ -3074,12 +3074,29 @@ datasrctarget(void *data, struct wl_data_source *source, const char *mimetype)
 {
 }
 
+static void
+writeall(int fd, const char *buf, size_t len)
+{
+	ssize_t r;
+
+	while (len > 0) {
+		if ((r = write(fd, buf, len)) < 0) {
+			if (errno == EINTR)
+				continue;
+			fprintf(stderr, "write selection: %s\n", strerror(errno));
+			return;
+		}
+		buf += r;
+		len -= r;
+	}
+}
+
 void
 datasrcsend(void *data, struct wl_data_source *source, const char *mimetype,
 		int32_t fd)
 {
 	if (wlsel.primary)
-		write(fd, wlsel.primary, strlen(wlsel.primary));
+		writeall(fd, wlsel.primary, strlen(wlsel.primary));
 	close(fd);
 }
 
@@ -3136,7 +3153,7 @@ primselsrcsend(void *data, struct zwp_primary_selection_source_v1 *source,
 		const char *mimetype, int32_t fd)
 {
 	if (wlprimsel.text)
-		write(fd, wlprimsel.text, strlen(wlprimsel.text));
+		writeall(fd, wlprimsel.text, strlen(wlprimsel.text));
 	close(fd);
 }
 

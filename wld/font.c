@@ -113,7 +113,7 @@ struct wld_font * wld_font_open_pattern(struct wld_font_context * context,
 
 	font->context = context;
 
-	FT_Error error;
+	FT_Error error = FT_Err_Cannot_Open_Resource;
 	if (match)
 	{
 		result = FcPatternGetString(match, FC_FILE, 0, (FcChar8 **) &filename);

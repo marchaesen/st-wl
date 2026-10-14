@@ -14,6 +14,9 @@ THISDIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 ifdef DEBUG
 DEBUGFLAGS=-O0 -g -DDEBUG
+else
+DEBUGFLAGS=-O2
+LDFLAGS += -s
 endif
 
 SRC = st.c wl.c xdg-shell-protocol.c xdg-decoration-protocol.c primary-selection-protocol.c $(SIXEL_C) $(LIGATURES_C) $(KITTY_GRAPHICS_C)
