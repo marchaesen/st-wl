@@ -61,11 +61,11 @@ primary-selection-client-protocol.h:
 
 ifeq ($(if $(V),$(V),0), 0)
     define quiet
-			@echo "  $1 $(notdir $(<:%.c=.objects/%.o))"
+      @echo "  $1 $(notdir $(<:%.c=.objects/%.o))"
       @$(if $2,$2,$($1))
     endef
     define quietlink
-			@echo "  $1 $@"
+      @echo "  $1 $@"
       @$(if $2,$2,$($1))
     endef
 else
