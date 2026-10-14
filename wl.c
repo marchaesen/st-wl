@@ -35,7 +35,7 @@ char *argv0;
 #include "graphics.h"
 #endif // KITTY_GRAPHICS_PATCH
 
-static char *font = "JetBrainsMono Nerd Font:antialias=true:autohint=true";
+static char *font = "JetBrainsMono Nerd Font:antialias=true:hintstyle=hintfull";
 
 #if SIXEL_PATCH
 #include "sixel.h"
